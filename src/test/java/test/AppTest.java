@@ -1,4 +1,4 @@
-package IOTProject;
+package test;
 
 import junit.framework.Test;
 import junit.framework.TestCase;

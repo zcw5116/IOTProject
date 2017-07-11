@@ -1,4 +1,4 @@
-package IOTProject;
+package test;
 
 /**
  * Hello world!
