@@ -196,7 +196,7 @@ object MMEAnalysis {
     mmenextrdd.saveAsHadoopDataset(authJobConf)
 
 
-  // 失败原因
+  // 失败原因 
 /*  val failedSql = "select  u.vpdncompanycode, m.pcause, sum(m.req_cnt) as req_cnt " +
     " from "+mdnregtable+" m, "+cachedUserinfoTable+" u " +
     " where m.mdn = u.mdn and m.pcause<>'success'  " +
