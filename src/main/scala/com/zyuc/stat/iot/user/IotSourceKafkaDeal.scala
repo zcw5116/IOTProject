@@ -9,13 +9,17 @@ import org.apache.spark.{SparkConf, SparkContext}
 import scala.util.parsing.json.JSON
 
 /**
- * Created by cuihs on 2017/6/20.
+ * Created by wangpf on 2017/6/20.
+ * desc:数据匹配case class
  */
-
 case class pgwradius_out(APN: String, Duration: String, IPAddr: String, MDN: String,
                          InputOctets: String, OutputOctets: String, NetType: String, SessionID: String,
                          Time: String, Status: String, TerminateCause: String, dayid: String)
 
+/**
+ * Created by wangpf on 2017/6/20.
+ * desc:使用streaming实时清洗上下线信息入hive表
+ */
 object IotSourceKafkaDeal {
   def main(args: Array[String]) {
     // 创建StreamingContext
@@ -112,6 +116,10 @@ object IotSourceKafkaDeal {
     ssc.awaitTermination()
   }
 
+  /**
+   * Created by wangpf on 2017/6/20.
+   * desc:查看Map中是否存在某一个key，若不存在将其值置为-1
+   */
   def getMapData(map: Map[String, String], key: String): String = {
     if (map.contains(key))
       map(key)
@@ -119,6 +127,10 @@ object IotSourceKafkaDeal {
       "-1"
   }
 
+  /**
+   * Created by wangpf on 2017/6/20.
+   * desc:解析kafka中发送的字符串由 YYYY-MM-DD HH24:MI:SS转成YYYYMMDDHH24MISS
+   */
   def parseTime(timevale: String): String = {
     val timeType = "([0-9]{4})-([0-9]{2})-([0-9]{2}) ([0-9]{2}):([0-9]{2}):([0-9]{2})".r
 

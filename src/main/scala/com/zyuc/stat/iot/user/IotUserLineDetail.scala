@@ -16,7 +16,8 @@ import scala.collection.mutable.{ArrayBuffer, Map}
 import scala.io.Source
 
 /**
- * Created by cuihs on 2017/6/26.
+ * Created by wangpf on 2017/6/26.
+ * desc:计算出统计时间到统计时间后五分钟之间的上下线用户数
  */
 
 object IotUserLineDetail {
@@ -161,6 +162,10 @@ object IotUserLineDetail {
     CommonUtils.updateBptime(fileName, endTime.substring(0, 12))
   }
 
+  /**
+   * Created by wangpf on 2017/6/28.
+   * desc:根据参数获取处理时间
+   */
   private def getStatisTime(fileName: String): (String, String, String, String, String, String) ={
     var startTime: String = null
     var endTime: String = null
@@ -201,6 +206,10 @@ object IotUserLineDetail {
     (startTime, endTime, statisday, statishhmm, lastPeriodday, lastPeriodhhmm)
   }
 
+  /**
+   * Created by wangpf on 2017/6/28.
+   * desc:创建hbase表
+   */
   private def createTbaleIfexists(statisDay: String): Unit = {
     val conn = HbaseUtils.getConnect("EPC-LOG-NM-15,EPC-LOG-NM-17,EPC-LOG-NM-16", "2181")
     //Hbase表模式管理器
@@ -222,6 +231,10 @@ object IotUserLineDetail {
     conn.close()
   }
 
+  /**
+   * Created by wangpf on 2017/6/28.
+   * desc:若key存在则继续累加，若key不存在则将值赋予key
+   */
   private def getMapData (key: (String, String), map: Map[(String, String), Long], value: String): Long = {
     if (map.contains(key))
       map(key) + value.toLong
@@ -229,6 +242,10 @@ object IotUserLineDetail {
       value.toLong
   }
 
+  /**
+   * Created by wangpf on 2017/6/28.
+   * desc:获取tuple的第几个数据
+   */
   private def getMapData1 (key: String, map: Map[String, (Long, Long, Long, Long)], value: Int): Long = {
     if (map.contains(key))
       value match {
@@ -242,7 +259,10 @@ object IotUserLineDetail {
       0L
   }
 
-  // 扫描记录并对rowkey模糊匹配
+  /**
+   * Created by wangpf on 2017/6/28.
+   * desc:模糊匹配出数据转为Map
+   */
   private def RecordFilter(connection: Connection, tablename: String, Hhmm: String): mutable.Map[String, (Long, Long, Long, Long)] ={
     val dataMap = scala.collection.mutable.Map[String, (Long, Long, Long, Long)]()
 

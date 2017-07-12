@@ -18,7 +18,8 @@ import scala.collection.mutable
 import scala.io.Source
 
 /**
- * Created by cuihs on 2017/6/28.
+ * Created by wangpf on 2017/6/28.
+ * desc:计算出截止到统计时间的每个企业的用户数
  */
 object IotOnlineUsernum {
   def main(args: Array[String]) {
@@ -197,6 +198,10 @@ object IotOnlineUsernum {
     CommonUtils.updateBptime(fileName, bpTime)
   }
 
+  /**
+   * Created by wangpf on 2017/6/28.
+   * desc:将不存在的数据置为0
+   */
   private def getMapDataLong(map: mutable.Map[String, (Long, Long)], key: String): (Long, Long) = {
     if (map.contains(key))
       map(key)
@@ -204,6 +209,10 @@ object IotOnlineUsernum {
       (0L, 0L)
   }
 
+  /**
+   * Created by wangpf on 2017/6/28.
+   * desc:根据参数获取处理时间
+   */
   private def getStatisTime(fileName: String, IotUserLineDetailfileName: String): (String, String, String, Int) = {
     var referTime: String = null
     var bpTime: String = null
@@ -257,6 +266,10 @@ object IotOnlineUsernum {
     (statisTime, referTime, bpTime, flag)
   }
 
+  /**
+   * Created by wangpf on 2017/6/28.
+   * desc:创建hbase表
+   */
   private def createTbaleIfexists(statisDay: String): Unit = {
     val conn = HbaseUtils.getConnect("EPC-LOG-NM-15,EPC-LOG-NM-17,EPC-LOG-NM-16", "2181")
     //Hbase表模式管理器
@@ -276,7 +289,10 @@ object IotOnlineUsernum {
     conn.close()
   }
 
-  // 扫描记录 并转成DataFrame
+  /**
+   * Created by wangpf on 2017/6/28.
+   * desc:模糊匹配出数据转为DataFrame
+   */
   private def scanRecordToDf(sc: SparkContext, sqlContext: SQLContext, tablename: String): DataFrame ={
     // 创建hbase configuration
     val hBaseConf = HbaseUtils.getHbaseConf("EPC-LOG-NM-15,EPC-LOG-NM-17,EPC-LOG-NM-16", "2181")
@@ -316,7 +332,10 @@ object IotOnlineUsernum {
     shop
   }
 
-  // 扫描记录并对rowkey模糊匹配
+  /**
+   * Created by wangpf on 2017/6/28.
+   * desc:模糊匹配出数据转为Map
+   */
   private def referRecordFilter(connection: Connection, tablename: String, Hhmm: String): mutable.Map[String, (Long, Long)] ={
     val dataMap = scala.collection.mutable.Map[String, (Long, Long)]()
 
@@ -343,6 +362,10 @@ object IotOnlineUsernum {
     dataMap
   }
 
+  /**
+   * Created by wangpf on 2017/6/28.
+   * desc:模糊匹配出数据转为Map
+   */
   private def StatisRecordFilter(connection: Connection, tablename: String, Hhmm: String): mutable.Map[String, (Long, Long)] ={
     val dataMap = scala.collection.mutable.Map[String, (Long, Long)]()
 
@@ -389,7 +412,11 @@ object IotOnlineUsernum {
 
     dataMap
   }
-  // 获取当前统计时间的基线数据写入表
+
+  /**
+   * Created by wangpf on 2017/6/28.
+   * desc:获取当前统计时间的基线数据
+   */
   private def getBaselineData(connection: Connection, tablename: String, Hhmm: String): mutable.Map[String, (Long, Long)] = {
     val dataMap = scala.collection.mutable.Map[String, (Long, Long)]()
 

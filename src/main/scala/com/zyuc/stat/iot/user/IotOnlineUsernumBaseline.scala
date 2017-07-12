@@ -16,7 +16,8 @@ import scala.collection.mutable.Set
 import scala.io.Source
 
 /**
- * Created by cuihs on 2017/6/30.
+ * Created by wangpf on 2017/6/30.
+ * desc:计算出统计时间到统计时间后12小时的企业在线用户数的基线
  */
 object IotOnlineUsernumBaseline {
   private val hBaseConf = HbaseUtils.getHbaseConf("EPC-LOG-NM-15,EPC-LOG-NM-17,EPC-LOG-NM-16", "2181")
@@ -56,7 +57,7 @@ object IotOnlineUsernumBaseline {
         s"and Time < ${endTime} " +
         "group by companycode, Time"
 
-    val jobconf = SparkHbaseUtils.getHbasejobConf(hBaseConf, "iot_online_users_" + baselineTime)
+    val jobconf = HbaseUtils.getHbasejobConf(hBaseConf, "iot_online_users_" + baselineTime)
     // 批量插入hbase
     hiveContext.sql(sql).coalesce(1).rdd.map( x => {
       val put = new Put(Bytes.toBytes(x(0) + "_" + x(1)))
@@ -71,7 +72,10 @@ object IotOnlineUsernumBaseline {
     sc.stop
   }
 
-  // 根据参数获取时间
+  /**
+   * Created by wangpf on 2017/6/30.
+   * desc:根据参数获取时间，基线取前7天数据进行计算
+   */
   def getStatistime(fileName: String): (String, String, String, mutable.Set[String]) ={
     var baselineTime: String = null
     var beginTime: String = null
@@ -120,7 +124,10 @@ object IotOnlineUsernumBaseline {
     (baselineTime, beginTime, endTime, dayArray)
   }
 
-  // 扫描记录 并转成DataFrame
+  /**
+   * Created by wangpf on 2017/6/30.
+   * desc:扫描记录 并转成DataFrame，过滤掉不存在字段的数据
+   */
   def scanRecordToRdd(sc: SparkContext, tablename: String): RDD[(String, String, Long, Long)] = {
     // 创建hbase configuration
     hBaseConf.set(TableInputFormat.INPUT_TABLE, tablename)

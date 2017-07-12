@@ -14,10 +14,16 @@ import org.apache.spark.streaming.dstream.InputDStream
 import org.apache.spark.streaming.kafka.{KafkaUtils, HasOffsetRanges}
 
 /**
- * Created by cuihs on 2017/6/14.
+ * Created by wangpf on 2017/6/14.
+ * desc:spark使用kafka相关的工具类
  */
 object SparkKafkaUtils extends Serializable {
-  // 从zookeeper获取offset信息
+  /**
+   * Created by wangpf on 2017/6/14.
+   * desc:从zookeeper获取offset信息
+   *      若zookeeper中存储了所有的topic信息则从记录的offset开始计算
+   *      否则从最大或者最小(根据kafka设置)的offset开始计算
+   */
   def createDirectKafkaStream (ssc: StreamingContext, kafkaParams: Map[String, String],
                                zkClient: ZkClient, topics: Set[String], groupName: String
                                 ): InputDStream[(String, String)] = {
@@ -37,6 +43,10 @@ object SparkKafkaUtils extends Serializable {
     kafkaStream
   }
 
+  /**
+   * Created by wangpf on 2017/6/14.
+   * desc:遍历读取zookeeper的offset信息
+   */
   def getFromOffsets(zkClient : ZkClient,topics : Set[String],groupName : String): (Map[TopicAndPartition, Long], Int) = {
     // 如果 zookeeper中有保存offset,我们会利用这个offset作为kafkaStream 的起始位置
     var fromOffsets: Map[TopicAndPartition, Long] = Map()
@@ -69,6 +79,10 @@ object SparkKafkaUtils extends Serializable {
     (fromOffsets,flag)
   }
 
+  /**
+   * Created by wangpf on 2017/6/14.
+   * desc:根据rdd存储offset
+   */
   def saveOffsets(zkClient: ZkClient, groupName: String, rdd: RDD[_]) = {
     val offsetsRanges = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
 
@@ -80,6 +94,10 @@ object SparkKafkaUtils extends Serializable {
     }
   }
 
+  /**
+   * Created by wangpf on 2017/6/14.
+   * desc:存储offset
+   */
   def updatePersistentPath(client: ZkClient, path: String, data: String) = {
     try {
       client.writeData(path, data)
@@ -98,12 +116,20 @@ object SparkKafkaUtils extends Serializable {
     }
   }
 
+  /**
+   * Created by wangpf on 2017/6/14.
+   * desc:新建zookeeper目录
+   */
   private def createParentPath(client: ZkClient, path: String) = {
     val parentDir = path.substring(0, path.lastIndexOf('/'))
     if (parentDir.length != 0)
       client.createPersistent(parentDir, true)
   }
 
+  /**
+   * Created by wangpf on 2017/6/14.
+   * desc:创建KafkaProducer
+   */
   def createBroker(brokers: String): KafkaProducer[String, String] = {
     val props = new Properties()
     props.put("bootstrap.servers", brokers)
@@ -114,11 +140,19 @@ object SparkKafkaUtils extends Serializable {
     producer
   }
 
+  /**
+   * Created by wangpf on 2017/6/14.
+   * desc:向kafka发送信息
+   */
   def sendKafka (producer : KafkaProducer[String, String],topic : String,msg : String) = {
     val record = new ProducerRecord[String, String](topic, msg)
     producer.send(record)
   }
 
+  /**
+   * Created by wangpf on 2017/6/14.
+   * desc:连接zookeeper
+   */
   def getZkConnect(hostAndPortList: String):ZkClient = {
     val zkClient = new ZkClient(hostAndPortList)
 

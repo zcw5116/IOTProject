@@ -62,7 +62,10 @@ object HbaseUtils {
 
   }
 
-  // 创建一个配置
+  /**
+   * Created by wangpf on 2017/6/14.
+   * desc:创建hbase配置
+   */
   def getHbaseConf(quorum: String, clientPort: String): Configuration = {
     //创建一个配置，采用的是工厂方法
     val conf = HBaseConfiguration.create
@@ -75,6 +78,10 @@ object HbaseUtils {
     conf
   }
 
+  /**
+   * Created by wangpf on 2017/6/14.
+   * desc:创建hbase connection
+   */
   def getConnect(quorum: String, clientPort: String): Connection = {
     val hbaseConf = getHbaseConf(quorum, clientPort)
     val connection = ConnectionFactory.createConnection(hbaseConf)
@@ -82,6 +89,10 @@ object HbaseUtils {
     connection
   }
 
+  /**
+   * Created by wangpf on 2017/6/14.
+   * desc:创建hbase表对象
+   */
   def getHbaseTbale(quorum: String, clientPort: String, tableName: String): Table = {
     val hbaseConf = getHbaseConf(quorum, clientPort)
     val connection = ConnectionFactory.createConnection(hbaseConf)
@@ -90,6 +101,10 @@ object HbaseUtils {
     table
   }
 
+  /**
+   * Created by wangpf on 2017/6/14.
+   * desc:创建hbase JobConf
+   */
   def getHbasejobConf(hbaseConf : Configuration,tableName : String): JobConf = {
     val jobConf = new JobConf(hbaseConf)
     jobConf.setOutputFormat(classOf[TableOutputFormat])
