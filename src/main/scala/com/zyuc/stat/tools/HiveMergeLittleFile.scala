@@ -1,4 +1,4 @@
-package com.zyuc.tools
+package com.zyuc.stat.tools
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileUtil, Path, FileSystem}

@@ -1,12 +1,16 @@
 package com.zyuc.stat.utils
 
-import org.apache.hadoop.hbase.client.{Connection, ConnectionFactory}
+import com.zyuc.stat.properties.ConfigProperties
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hbase.client.{Table, Connection, ConnectionFactory}
+import org.apache.hadoop.hbase.mapred.TableOutputFormat
 import org.apache.hadoop.hbase.{HBaseConfiguration, HColumnDescriptor, HTableDescriptor, TableName}
+import org.apache.hadoop.mapred.JobConf
 
 /**
   * Created by slview on 17-6-29.
   */
-object HbaseUtil {
+object HbaseUtils {
   //创建表
   def createHTable(connection: Connection,tablename: String, familyarr:Array[String]): Unit=
   {
@@ -56,5 +60,41 @@ object HbaseUtil {
     fs(2) = "test3"
     createIfNotExists(tname, fs)
 
+  }
+
+  // 创建一个配置
+  def getHbaseConf(quorum: String, clientPort: String): Configuration = {
+    //创建一个配置，采用的是工厂方法
+    val conf = HBaseConfiguration.create
+    //val tablename = "blog"
+    conf.set("hbase.zookeeper.property.clientPort", clientPort)
+    //conf.set("zookeeper.znode.parent", "/hbase-unsecure")
+    conf.set("hbase.zookeeper.quorum", quorum)
+    //conf.set(TableInputFormat.INPUT_TABLE, tablename)
+
+    conf
+  }
+
+  def getConnect(quorum: String, clientPort: String): Connection = {
+    val hbaseConf = getHbaseConf(quorum, clientPort)
+    val connection = ConnectionFactory.createConnection(hbaseConf)
+
+    connection
+  }
+
+  def getHbaseTbale(quorum: String, clientPort: String, tableName: String): Table = {
+    val hbaseConf = getHbaseConf(quorum, clientPort)
+    val connection = ConnectionFactory.createConnection(hbaseConf)
+    val table = connection.getTable(TableName.valueOf(tableName))
+
+    table
+  }
+
+  def getHbasejobConf(hbaseConf : Configuration,tableName : String): JobConf = {
+    val jobConf = new JobConf(hbaseConf)
+    jobConf.setOutputFormat(classOf[TableOutputFormat])
+    jobConf.set(TableOutputFormat.OUTPUT_TABLE, tableName)
+
+    jobConf
   }
 }

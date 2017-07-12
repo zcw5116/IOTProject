@@ -1,5 +1,6 @@
 package com.zyuc.stat.utils
 
+import com.zyuc.stat.properties.RedisProperties
 import redis.clients.jedis.{JedisPool, JedisPoolConfig}
 
 /**

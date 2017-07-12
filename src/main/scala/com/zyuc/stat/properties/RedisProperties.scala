@@ -1,4 +1,4 @@
-package com.zyuc.stat.utils
+package com.zyuc.stat.properties
 
 import scala.xml.XML
 

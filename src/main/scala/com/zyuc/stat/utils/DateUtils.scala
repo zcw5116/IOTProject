@@ -9,7 +9,7 @@ import org.apache.commons.lang3.time.FastDateFormat
 /**
   * Created by slview on 17-6-27.
   */
-object DateUtil {
+object DateUtils {
   def getNowTime():String={
     val fdf = FastDateFormat.getInstance("yyyyMMddHHmmss")
     val timeid = fdf.format(new Date())
