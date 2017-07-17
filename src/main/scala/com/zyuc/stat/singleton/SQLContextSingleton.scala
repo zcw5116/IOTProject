@@ -1,4 +1,4 @@
-package com.zyuc.stat.utils
+package com.zyuc.stat.singleton
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.hive.HiveContext

@@ -1,7 +1,8 @@
 package com.zyuc.stat.iot.mme
 
-import com.zyuc.stat.utils.DateUtil._
-import com.zyuc.stat.utils.{ConfigProperties, HbaseUtil}
+import com.zyuc.stat.properties.ConfigProperties
+import com.zyuc.stat.utils.DateUtils._
+import com.zyuc.stat.utils.HbaseUtils
 import org.apache.hadoop.hbase.HBaseConfiguration
 import org.apache.hadoop.hbase.client.{ConnectionFactory, Put}
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable
@@ -119,7 +120,8 @@ object MMEAnalysis {
     families(0) = "mmeinfo"
     families(1) = "mmefailed"
     // 创建表, 如果表存在， 自动忽略
-    HbaseUtil.createIfNotExists(htable, families)
+
+    HbaseUtils.createIfNotExists(htable,families)
 
 
     val authJobConf = new JobConf(conf, this.getClass)
@@ -224,7 +226,9 @@ object MMEAnalysis {
     val failedfamilies = new Array[String](1)
     failedfamilies(0) = "mmeinfo"
     // 创建表, 如果表存在， 自动忽略
-    HbaseUtil.createIfNotExists(hfailedtable, failedfamilies)
+
+    HbaseUtils.createIfNotExists(hfailedtable,failedfamilies)
+
 
     val failedsiteJobConf = new JobConf(conf, this.getClass)
     failedsiteJobConf.setOutputFormat(classOf[TableOutputFormat])

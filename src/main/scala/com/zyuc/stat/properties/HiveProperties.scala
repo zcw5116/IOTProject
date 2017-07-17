@@ -1,4 +1,4 @@
-package com.zyuc.stat.utils
+package com.zyuc.stat.properties
 
 /**
   * Created by slview on 17-6-19.

@@ -1,7 +1,7 @@
 package com.zyuc.stat.iot.mme
 
-import com.zyuc.stat.utils.ConfigProperties
-import com.zyuc.stat.utils.DateUtil.timeCalcWithFormatConvertSafe
+import com.zyuc.stat.properties.ConfigProperties
+import com.zyuc.stat.utils.DateUtils.timeCalcWithFormatConvertSafe
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{SparkConf, SparkContext}
