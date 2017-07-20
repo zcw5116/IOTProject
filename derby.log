@@ -1,0 +1,13 @@
+----------------------------------------------------------------
+Thu Jul 20 10:53:50 CST 2017:
+Booting Derby version The Apache Software Foundation - Apache Derby - 10.11.1.1 - (1616546): instance a816c00e-015d-5dea-6b36-000015dc7640 
+on database directory /home/slview/data/IOTProject/metastore_db with class loader org.apache.spark.sql.hive.client.IsolatedClientLoader$$anon$1@60e5d47 
+Loaded from file:/home/slview/.m2/repository/org/apache/derby/derby/10.11.1.1/derby-10.11.1.1.jar
+java.vendor=Oracle Corporation
+java.runtime.version=1.7.0_79-b15
+user.dir=/home/slview/data/IOTProject
+os.name=Linux
+os.arch=amd64
+os.version=2.6.32-504.el6.x86_64
+derby.system.home=null
+Database Class Loader started - derby.database.classpath=''

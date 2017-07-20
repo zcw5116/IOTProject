@@ -4,13 +4,17 @@ package com.zyuc.stat.utils
   * Created by zhoucw on 17-7-19.
   */
 
-import java.io.IOException
+import java.io.{File, FileOutputStream, IOException, InputStream}
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.io.IOUtils
+import org.apache.spark.Logging
+
 import scala.collection.mutable
 
 
-object FileUtils {
+object FileUtils extends Logging{
 
   /**
     *
@@ -114,11 +118,43 @@ object FileUtils {
 
   }
 
+  def downloadFileFromHdfs(fileSystem: FileSystem, hdfsDirLocation:String, localDirLocation:String, suffix:String) :Unit = {
+    val hdfsPath = new Path(hdfsDirLocation+"*")
+    val file = new File(localDirLocation)
+    if(!file.exists()){
+      file.mkdirs()
+    }
+    val hdfsStatus = fileSystem.globStatus(hdfsPath)
+    hdfsStatus.map(p=>{
+      val file = p.getPath
+      val name = file.toString.substring(file.toString.lastIndexOf("/")+1)
+      val localPath = localDirLocation+name+suffix
+      val len = fileSystem.getContentSummary(p.getPath).getLength
+      if(len>0){
+        val in = fileSystem.open(file)
+        val out= new FileOutputStream(localPath)
+        IOUtils.copyBytes(in,out, 4096,true)
+      }
+    })
+  }
+
+  def renameHDFSDir(fileSystem:FileSystem, srcLocation:String, destLocation:String) :Unit = {
+    val srcPath = new Path(srcLocation)
+    val destPath = new Path(destLocation)
+    val isRename = fileSystem.rename(srcPath, destPath)
+    var result = "Success"
+    if(!isRename){
+      result = "Failed"
+    }
+    logInfo(s"$srcLocation rename to $destLocation :" + result)
+  }
 
 
   def main(args: Array[String]): Unit = {
     val config = new Configuration
     var fileSystem: FileSystem = null
+    fileSystem = FileSystem.get(config)
+/*
     try {
 
       fileSystem = FileSystem.get(config)
@@ -134,7 +170,11 @@ object FileUtils {
       case e: Exception =>
         e.printStackTrace()
     }
-
+*/
+    val parentDirLocation = "/tmp/zcw"
+    val srcLocation = "/tmp/zcw/t1"
+    val destLocation = "/tmp/zcw/t3"
+    renameHDFSDir(fileSystem, srcLocation, destLocation)
 
   }
 
