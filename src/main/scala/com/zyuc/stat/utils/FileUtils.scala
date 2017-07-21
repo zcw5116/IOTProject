@@ -5,7 +5,6 @@ package com.zyuc.stat.utils
   */
 
 import java.io.{File, FileOutputStream, IOException, InputStream}
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.io.IOUtils
@@ -138,15 +137,12 @@ object FileUtils extends Logging{
     })
   }
 
-  def renameHDFSDir(fileSystem:FileSystem, srcLocation:String, destLocation:String) :Unit = {
+  def renameHDFSDir(fileSystem:FileSystem, srcLocation:String, destLocation:String) :Boolean = {
     val srcPath = new Path(srcLocation)
     val destPath = new Path(destLocation)
     val isRename = fileSystem.rename(srcPath, destPath)
-    var result = "Success"
-    if(!isRename){
-      result = "Failed"
-    }
-    logInfo(s"$srcLocation rename to $destLocation :" + result)
+    isRename
+
   }
 
 

@@ -35,7 +35,7 @@ object InterPhoneCDR {
     val dayid = sc.getConf.get("spark.app.dayid")
     val localDirLocation = sc.getConf.get("spark.app.localDirLocation")
     val hiveTable = "iot_cdr_3gaaa_ticket"
-    val df = sqlContext.read.format("text").load("/tmp/zcw/t2/*.txt","/tmp/zcw/t1/*.txt").coalesce(1)
+
     // 读取mdn数据
     val interPhoneMDNDF = sqlContext.read.format("text").load("/hadoop/IOT/ANALY_PLATFORM/interphone/mdn/mdn.txt").coalesce(1)
     val mdnStruct = StructType(Array(StructField("mdn", StringType)))
