@@ -109,10 +109,9 @@ object FileUtils extends Logging{
 
   def moveNewlogFiles(outputPath:String, outFiles:Array[FileStatus], loadTime:String) :Unit = {
     var num = 1
-    outFiles.map(filestatus=>{
-      val srcLocation = filestatus.getPath().toString
+    outFiles.foreach(filestatus=>{
+      val srcLocation = filestatus.getPath.toString
       val destLocation = srcLocation.replace(outputPath+"newlog", outputPath+ "data/" + loadTime)
-
     })
 
   }
@@ -142,7 +141,6 @@ object FileUtils extends Logging{
     val destPath = new Path(destLocation)
     val isRename = fileSystem.rename(srcPath, destPath)
     isRename
-
   }
 
 

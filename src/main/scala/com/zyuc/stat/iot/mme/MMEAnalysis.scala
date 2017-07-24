@@ -77,7 +77,7 @@ object MMEAnalysis {
          |where m.dayid='${partitiondayid}' and m.hourid='${parthourid}'
          |group by m.msisdn, m.pcause
          |union all
-         |select m.msisdn as mdn, case when m.pcause in('0x0000','0xFFFF') then 'success' else m.pcause end as pcause, count(*) as req_cnt, sum(case when pcause in('0x0000','0xFFFF') then 1 else 0 end ) as reqsucess
+         |select m.msisdn as mdn, case when m.pcause in('0x0000') then 'success' else m.pcause end as pcause, count(*) as req_cnt, sum(case when pcause in('0x0000','0xFFFF') then 1 else 0 end ) as reqsucess
          |from iot_mme_sm_hw m
          |where m.dayid='${partitiondayid}' and m.hourid='${parthourid}'
          |group by m.msisdn, m.pcause
