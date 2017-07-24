@@ -45,11 +45,11 @@ object UserOnlineBaseData {
     val g3usersql =
       s"""select t1.mdn from
          |    (select t.mdn, t.account_session_id
-         |     from iot_cdr_haccg_ticket t
+         |     from iot_cdr_3gaaa_ticket t
          |     where t.acct_status_type<>'2' and t.dayid='${dayidOfLastHourtime}' and t.hourid='${lastHourid}'
          |     ) t1,
          |    (select t.mdn, t.account_session_id
-         |    from iot_cdr_haccg_ticket t
+         |    from iot_cdr_3gaaa_ticket t
          |    where t.acct_status_type='2' and t.dayid='${dayidOfCurHourtime}' and t.hourid='${curHourid}'
          |    ) t2
          |where t1.mdn=t2.mdn and t1.account_session_id=t2.account_session_id
@@ -80,7 +80,7 @@ object UserOnlineBaseData {
     sqlContext.sql(pgwcompsql).coalesce(1)
 
     val companyonlinesum =
-      s"""select c.vpdncompanycode, nvl(t1.g3cnt,0) as g3cnt, nvl(t2.pgwcnt,0) as pgwcnt
+      s"""select '${curHourtime}' as hourtime,c.vpdncompanycode, nvl(t1.g3cnt,0) as g3cnt, nvl(t2.pgwcnt,0) as pgwcnt
          |from ${cachedCompanyTable} c
          |left join ${g3onlinecomptable} t1 on(c.vpdncompanycode=t1.vpdncompanycode)
          |left join ${pgwonlinecomptable} t2 on(c.vpdncompanycode=t2.vpdncompanycode)
