@@ -131,6 +131,11 @@
         <artifactId>spark-csv_2.10</artifactId>
         <version>1.0.3</version>
       </dependency>
+      <dependency>
+        <groupId>com.alibaba</groupId>
+        <artifactId>fastjson</artifactId>
+        <version>${fastjson.version}</version>
+      </dependency>
     </dependencies>
     <build>
       <plugins>
