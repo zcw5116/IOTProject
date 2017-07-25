@@ -8,6 +8,7 @@ import kafka.serializer.StringDecoder
 import org.I0Itec.zkclient.ZkClient
 import org.I0Itec.zkclient.exception.{ZkNodeExistsException, ZkNoNodeException}
 import org.apache.kafka.clients.producer.{ProducerRecord, KafkaProducer}
+import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream.InputDStream
@@ -17,7 +18,7 @@ import org.apache.spark.streaming.kafka.{KafkaUtils, HasOffsetRanges}
  * Created by wangpf on 2017/6/14.
  * desc:spark使用kafka相关的工具类
  */
-object SparkKafkaUtils extends Serializable {
+object SparkKafkaUtils extends Serializable with Logging {
   /**
    * Created by wangpf on 2017/6/14.
    * desc:从zookeeper获取offset信息
@@ -28,7 +29,7 @@ object SparkKafkaUtils extends Serializable {
                                zkClient: ZkClient, topics: Set[String], groupName: String
                                 ): InputDStream[(String, String)] = {
     val (fromOffsets, flag) = SparkKafkaUtils.getFromOffsets(zkClient, topics, groupName)
-    println("flag = " + flag)
+    logInfo("flag = " + flag)
 
     var kafkaStream : InputDStream[(String, String)] = null
     if (flag == 1) {
@@ -59,7 +60,7 @@ object SparkKafkaUtils extends Serializable {
 
         // 查询该路径下是否字节点（默认有字节点为我们自己保存不同 partition 时生成的）
         val children = zkClient.countChildren(zkTopicPath)
-        println("children is " + children)
+        logInfo("children is " + children)
 
         // 如果保存过 offset,这里更好的做法,还应该和kafka上最小的offset做对比,不然会报OutOfRange的错误
         if (children > 0) {
@@ -68,7 +69,7 @@ object SparkKafkaUtils extends Serializable {
             val tp = TopicAndPartition(topic, i)
             //将不同 partition 对应的 offset 增加到 fromOffsets 中
             fromOffsets += (tp -> partitionOffset.toLong)
-            println("consume record: topic[" + topic + "] partition[" + i + "] offset[" + partitionOffset + "]")
+            logInfo("consume record: topic[" + topic + "] partition[" + i + "] offset[" + partitionOffset + "]")
           }
         } else {
           flag = 0
@@ -90,7 +91,7 @@ object SparkKafkaUtils extends Serializable {
       val zkPath = s"/consumers/${groupName}/offsets/${o.topic}/${o.partition}"
       // 将该partition的offset保存到zookeeper
       SparkKafkaUtils.updatePersistentPath(zkClient, zkPath, o.untilOffset.toString)
-      println(s"deal consume topic ${o.topic} partition ${o.partition} fromoffset ${o.fromOffset} untiloffset ${o.untilOffset}")
+      logInfo(s"deal consume topic ${o.topic} partition ${o.partition} fromoffset ${o.fromOffset} untiloffset ${o.untilOffset}")
     }
   }
 

@@ -1,8 +1,10 @@
 package com.zyuc.stat.iot.user
 
+import java.io.InputStream
 import java.text.SimpleDateFormat
 import java.util.Calendar
 
+import com.zyuc.stat.tools.GetProperties
 import com.zyuc.stat.utils.{CommonUtils, HbaseUtils}
 import org.apache.hadoop.hbase.{HColumnDescriptor, HTableDescriptor, TableName}
 import org.apache.hadoop.hbase.client._
@@ -21,7 +23,14 @@ import scala.io.Source
  * Created by wangpf on 2017/6/28.
  * desc:计算出截止到统计时间的每个企业的用户数
  */
-object IotOnlineUsernum {
+object IotOnlineUsernum extends GetProperties {
+  override def inputStreamArray: Array[InputStream] = Array(
+    this.getClass.getClassLoader.getResourceAsStream("kafka.proerties")
+  )
+
+  // 获取配置文件的内容
+  private val prop = props
+
   def main(args: Array[String]) {
     // 处理参数
     val fileName = "/home/slview/test/wangpf/BPFile/IotOnlineUsernum.BP"
@@ -43,23 +52,6 @@ object IotOnlineUsernum {
 
       // 创建hiveContext
       val hiveContext = new HiveContext(sc)
-      hiveContext.sql("use iot")
-      hiveContext.sql("set hive.mapred.supports.subdirectories=true")
-      hiveContext.sql("set mapreduce.input.fileinputformat.input.dir.recursive=true")
-      hiveContext.sql("set mapred.max.split.size=256000000")
-      hiveContext.sql("set mapred.min.split.size.per.node=128000000")
-      hiveContext.sql("set mapred.min.split.size.per.rack=128000000")
-      hiveContext.sql("set hive.hadoop.supports.splittable.combineinputformat=true")
-      hiveContext.sql("set hive.exec.compress.output=true")
-      hiveContext.sql("set mapred.output.compression.codec=org.apache.hadoop.io.compress.GzipCodec")
-      hiveContext.sql("set hive.input.format=org.apache.hadoop.hive.ql.io.CombineHiveInputFormat")
-
-      hiveContext.sql("set hive.merge.mapfiles=true")
-      hiveContext.sql("set hive.merge.mapredfiles=true")
-      hiveContext.sql("set hive.merge.size.per.task=64000000")
-      hiveContext.sql("set hive.merge.smallfiles.avgsize=64000000")
-
-      hiveContext.sql("set hive.groupby.skewindata=true")
 
       // 获取在线用户数基准数据
       hiveContext
@@ -91,7 +83,8 @@ object IotOnlineUsernum {
       println("sql = " + sql)
 
       // 获取当前基线数据
-      val conn = HbaseUtils.getConnect("EPC-LOG-NM-15,EPC-LOG-NM-17,EPC-LOG-NM-16", "2181")
+      val conn = HbaseUtils.getConnect(prop.getProperty("hbase.zookeeper.quorum"),
+        prop.getProperty("hbase.zookeeper.property.clientPort"))
       val currBaselineData = getBaselineData(conn, "iot_online_users_" + statisDay, statisHhmm)
       val referData = referRecordFilter(conn, "iot_online_users_" + referTime, "2355")
 
@@ -141,7 +134,8 @@ object IotOnlineUsernum {
       println(referTimeDay + "-----" + referTimeHhmm)
       println(statisDay + "-----" + statisHhmm)
 
-      val conn = HbaseUtils.getConnect("EPC-LOG-NM-15,EPC-LOG-NM-17,EPC-LOG-NM-16", "2181")
+      val conn = HbaseUtils.getConnect(prop.getProperty("hbase.zookeeper.quorum"),
+        prop.getProperty("hbase.zookeeper.property.clientPort"))
 
       val referData = referRecordFilter(conn, "iot_online_users_" + referTimeDay, referTimeHhmm)
       // 上下信息进行也是使用上个时间点
