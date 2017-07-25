@@ -65,7 +65,7 @@ object IotOnlineUsernumBaseline {
       put.addColumn(Bytes.toBytes("info"), Bytes.toBytes("b_3g_cnt"), Bytes.toBytes(x(2).toString))
       put.addColumn(Bytes.toBytes("info"), Bytes.toBytes("b_4g_cnt"), Bytes.toBytes(x(3).toString))
 
-      (new ImmutableBytesWritable,put)
+      (new ImmutableBytesWritable, put)
     })
       .saveAsHadoopDataset(jobconf)
 
@@ -101,7 +101,7 @@ object IotOnlineUsernumBaseline {
         calendar.add(Calendar.HOUR, 12)
         endTime = sdf.format(calendar.getTime()).substring(8, 10) + "00"
 
-        for(x <- 0 to 0) {
+        for (x <- 1 to 7) {
           calendar.setTime(inDate)
           calendar.add(Calendar.HOUR, -24*x)
           dayArray.add(sdf.format(calendar.getTime()).substring(0, 8))
@@ -153,7 +153,6 @@ object IotOnlineUsernumBaseline {
       ))
       .filter(_._3 != -9999999999L)
       .filter(_._4 != -9999999999L)
-    //      .toDF("companycode", "Time", "onlineusernum")
 
     shop
   }

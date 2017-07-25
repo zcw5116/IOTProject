@@ -69,11 +69,8 @@ object HbaseUtils {
   def getHbaseConf(quorum: String, clientPort: String): Configuration = {
     //创建一个配置，采用的是工厂方法
     val conf = HBaseConfiguration.create
-    //val tablename = "blog"
     conf.set("hbase.zookeeper.property.clientPort", clientPort)
-    //conf.set("zookeeper.znode.parent", "/hbase-unsecure")
     conf.set("hbase.zookeeper.quorum", quorum)
-    //conf.set(TableInputFormat.INPUT_TABLE, tablename)
 
     conf
   }
