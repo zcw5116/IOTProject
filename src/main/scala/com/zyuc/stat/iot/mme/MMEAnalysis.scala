@@ -42,7 +42,7 @@ object MMEAnalysis {
     // 结束时间 id
     val endtimeid = endtimestr.replaceAll("[-: ]", "")
     // 获取当前时间
-    val curtimeid = getNowTime()
+
 
     val sparkConf = new SparkConf() //.setAppName("MMEAnalysis").setMaster("local[4]")
 

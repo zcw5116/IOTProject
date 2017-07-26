@@ -9,8 +9,8 @@ import org.apache.commons.lang3.time.FastDateFormat
   * Created by slview on 17-6-27.
   */
 object DateUtils {
-  def getNowTime():String={
-    val fdf = FastDateFormat.getInstance("yyyyMMddHHmmss")
+  def getNowTime(format:String):String={
+    val fdf = FastDateFormat.getInstance(format)
     val timeid = fdf.format(new Date())
     timeid
   }
@@ -70,7 +70,7 @@ object DateUtils {
   def main(args: Array[String]): Unit = {
     println(timeCalcWithFormatConvertSafe("20170628230500","yyyyMMddHHmmss",1,"yyyy-MM-dd HH:mm:ss"))
 
-    println(getNowTime)
+
     println(getNextday)
     println(getNextTime("20170628230500",300,"yyyy-MM-dd HH:mm:ss"))
 
