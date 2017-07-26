@@ -75,8 +75,11 @@ object FileUtils extends Logging{
 
     // 删除数据目录到文件
     partitions.foreach(partition => {
-      val dataPath = new Path(outputPath + "data/" + partition + "/" + loadTime + "-" + "/*.orc")
-      fileSystem.delete(dataPath, false)
+      val dataPath = new Path(outputPath + "data/" + partition + "/" + loadTime + "-" + "*.orc")
+      fileSystem.globStatus(dataPath).foreach(x=> fileSystem.delete(x.getPath(),false)
+      )
+      // fileSystem.delete(dataPath, false)
+      fileSystem
     })
 
     val tmpPath = new Path(outputPath + "temp/" + loadTime + template + "/*.orc")
