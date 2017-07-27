@@ -123,7 +123,8 @@ object MMELogTimeAnalysis extends Logging{
     val failedSql =
       s"""select  u.vpdncompanycode, m.pcause, count(*) as req_cnt
          |from iot_mme_log m, ${cachedUserinfoTable} u
-         |where m.msisdn = u.mdn and m.pcause<>'success'
+         |where m.d=${partdayid} and m.h=${hourid} and m.m5 = ${m5id}
+         |and m.msisdn = u.mdn and m.pcause<>'success'
          |group by u.vpdncompanycode, m.pcause
        """.stripMargin
 

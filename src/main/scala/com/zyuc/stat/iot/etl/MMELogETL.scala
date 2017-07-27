@@ -6,6 +6,7 @@ import com.zyuc.stat.utils.FileUtils
 import com.zyuc.stat.utils.FileUtils.renameHDFSDir
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 import org.apache.spark.{Logging, SparkConf, SparkContext}
@@ -18,7 +19,7 @@ import scala.collection.mutable
   */
 object MMELogETL extends Logging {
 
-  def doJob(parentContext: SQLContext, fileSystem:FileSystem, loadTime:String, inputPath:String, outputPath:String, hwmmWildcard:String, hwsmWildcard:String, ztmmWildcard:String, ztsmWildcard:String): Unit ={
+  def doJob(parentContext: SQLContext, fileSystem:FileSystem, appName:String, loadTime:String, inputPath:String, outputPath:String, hwmmWildcard:String, hwsmWildcard:String, ztmmWildcard:String, ztsmWildcard:String): String ={
     var sqlContext = parentContext.newSession()
 
 
@@ -66,7 +67,7 @@ object MMELogETL extends Logging {
         template = template + "/" + partitionArray(i) + "=*"
       template // rename original dir
     }
-
+    try {
     val srcLocation = inputPath + "/" + loadTime
     val srcDoingLocation = inputPath + "/" + loadTime + "_doing"
     val isRename = renameHDFSDir(fileSystem, srcLocation, srcDoingLocation)
@@ -74,7 +75,7 @@ object MMELogETL extends Logging {
     if (!isRename) {
       result = "Failed"
       logInfo(s"$srcLocation rename to $srcDoingLocation :" + result)
-      //System.exit(1)
+      return "appName:" + appName + ": " + s"$srcLocation rename to $srcDoingLocation :" + result + ". "
     }
     logInfo(s"$srcLocation rename to $srcDoingLocation :" + result)
 
@@ -92,6 +93,7 @@ object MMELogETL extends Logging {
     if (!hwmmFileExists && !hwsmFileExists && !ztmmFileExists && !ztsmFileExists) {
       logInfo("No Files during time: " + loadTime)
       // System.exit(1)
+      return "appName:" + appName + ":No Files ."
     }
 
     var hwmmDF: DataFrame = null
@@ -188,9 +190,21 @@ object MMELogETL extends Logging {
     if (!isDoneRename) {
       doneResult = "Failed"
       logInfo(s"$srcDoingLocation rename to $srcDoneLocation :" + result)
+      return "appName:" + appName + ":" + s"$srcDoingLocation rename to $srcDoneLocation :" + result + ". "
       //System.exit(1)
     }
     logInfo(s"$srcDoingLocation rename to $srcDoneLocation :" + result)
+
+    return "appName:" + appName + ": ETL Success. "
+
+    }catch {
+      case e: Exception =>
+        e.printStackTrace()
+        SparkHadoopUtil.get.globPath(new Path(outputPath + "temp/" + loadTime)).map(fileSystem.delete(_, true))
+        SparkHadoopUtil.get.globPath(new Path(outputPath + "temp/" + loadTime)).map(fileSystem.delete(_, false))
+        logError("[" + appName + "] 失败 处理异常" + e.getMessage)
+        return "appName:" + appName + ": ETL Failed. "
+    }
   }
 
 
@@ -235,6 +249,8 @@ object MMELogETL extends Logging {
       template // rename original dir
     }
 
+
+
     val srcLocation = inputPath + "/" + loadTime
     val srcDoingLocation = inputPath + "/" + loadTime + "_doing"
     val isRename = renameHDFSDir(fileSystem, srcLocation, srcDoingLocation)
@@ -359,8 +375,7 @@ object MMELogETL extends Logging {
       System.exit(1)
     }
     logInfo(s"$srcDoingLocation rename to $srcDoneLocation :" + result)
-
-    sc.stop()
+   sc.stop()
   }
 
 }

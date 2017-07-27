@@ -20,7 +20,7 @@ object ConvertServer {
 
   def main(args: Array[String]) {
 
-    val sparkConf = new SparkConf().setAppName("ConvertServer").setMaster("local[2]")
+    val sparkConf = new SparkConf()//.setAppName("ConvertServer").setMaster("local[2]")
     val sc = new SparkContext(sparkConf)
     val sqlContext = new HiveContext(sc)
 
@@ -52,12 +52,14 @@ object ConvertServer {
 
         responseHeaders.set("Content-Type", "text/html;charset=utf-8")
 
+        var serverInfo = ""
         // 调用SparkSQL的方法进行测试
         try {
           if(serverLine == "test"){
             sqlContext.read.format("json").load("/hadoop/zcw/tmp/zips.json").show
           }
           else if(serverLine == "mmeETL"){
+            val appName = Params.getString("appName")
             val loadTime = Params.getString("loadTime")
             val inputPath = Params.getString("inputPath")
             val outputPath = Params.getString("outputPath")
@@ -65,7 +67,8 @@ object ConvertServer {
             val hwsmWildcard = Params.getString("hwsmWildcard")
             val ztmmWildcard = Params.getString("ztmmWildcard")
             val ztsmWildcard = Params.getString("ztsmWildcard")
-            MMELogETL.doJob(sqlContext,fileSystem, loadTime, inputPath, outputPath, hwmmWildcard, hwsmWildcard, ztmmWildcard, ztsmWildcard)
+            serverInfo = "未知异常"
+            serverInfo = MMELogETL.doJob(sqlContext,fileSystem, appName, loadTime, inputPath, outputPath, hwmmWildcard, hwsmWildcard, ztmmWildcard, ztsmWildcard)
           }
           else{
             System.out.println("go")
@@ -77,6 +80,8 @@ object ConvertServer {
             response = "失败"
             httpCode = 500
         }
+
+        response = serverInfo + "HttpServerStatus: " + response
 
         httpExchange.sendResponseHeaders(httpCode, response.getBytes.length)
         val responseBody: OutputStream = httpExchange.getResponseBody

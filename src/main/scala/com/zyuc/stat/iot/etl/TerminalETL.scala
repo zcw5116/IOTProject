@@ -1,6 +1,5 @@
 package com.zyuc.stat.iot.etl
 
-import com.zyuc.stat.iot.etl.MMELogETL.logInfo
 import com.zyuc.stat.iot.etl.util.TerminalConvertUtils
 import com.zyuc.stat.properties.ConfigProperties
 import com.zyuc.stat.utils.DateUtils
@@ -14,7 +13,7 @@ import org.apache.spark.sql.hive.HiveContext
   */
 object TerminalETL extends Logging {
   def main(args: Array[String]): Unit = {
-    val sparkConf = new SparkConf().setMaster("local[4]").setAppName("fd")
+    val sparkConf = new SparkConf()//.setMaster("local[4]").setAppName("fd")
     val sc = new SparkContext(sparkConf)
     val sqlContext = new HiveContext(sc)
     sqlContext.sql("use " + ConfigProperties.IOT_HIVE_DATABASE)
@@ -36,17 +35,12 @@ object TerminalETL extends Logging {
       System.exit(1)
     }
 
-
-
     var terminalDF = sqlContext.read.format("text").load(fileLocation)
-
 
     terminalDF = sqlContext.createDataFrame(terminalDF.map(x =>TerminalConvertUtils.parseLine(x.getString(0))), TerminalConvertUtils.struct)
 
     terminalDF.write.mode(SaveMode.Overwrite).format("orc").save(outputPath)
 
-
-
-    logInfo("success")
+    logInfo("ETL success")
   }
 }

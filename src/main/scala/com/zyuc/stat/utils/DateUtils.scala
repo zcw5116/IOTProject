@@ -67,15 +67,18 @@ object DateUtils {
     targettime
   }
 
+  def timeInterval(beginTime:String, endTime:String, format:String):Long= {
+    val fdf = FastDateFormat.getInstance(format)
+    val beginDate:Date = fdf.parse(beginTime)
+    val endDate:Date = fdf.parse(endTime)
+    val interval = (endDate.getTime() - beginDate.getTime())/1000
+    return  interval
+  }
+
   def main(args: Array[String]): Unit = {
-    println(timeCalcWithFormatConvertSafe("20170628230500","yyyyMMddHHmmss",1,"yyyy-MM-dd HH:mm:ss"))
 
-
-    println(getNextday)
-    println(getNextTime("20170628230500",300,"yyyy-MM-dd HH:mm:ss"))
-
-    val starttimestr = timeCalcWithFormatConvertSafe("20170628230500","yyyyMMddHHmmss",0,"yyyy-MM-dd HH:mm:ss")
-    println(starttimestr)
+    val test = timeInterval("201707271937","201707271938","yyyyMMddHHmm")
+    println("test:"+test)
 
   }
 }
