@@ -22,17 +22,7 @@ object MMELogETL extends Logging {
   def doJob(parentContext: SQLContext, fileSystem:FileSystem, appName:String, loadTime:String, inputPath:String, outputPath:String, hwmmWildcard:String, hwsmWildcard:String, ztmmWildcard:String, ztsmWildcard:String): String ={
     var sqlContext = parentContext.newSession()
 
-
-    println("loadtime:" + loadTime)
-    println("loadtime:" + inputPath)
-    println("loadtime:" + outputPath)
-    println("loadtime:" + hwmmWildcard)
-    println("loadtime:" + hwsmWildcard)
-    println("loadtime:" + ztmmWildcard)
-    println("loadtime:" + ztsmWildcard)
-
     sqlContext.sql("use " + ConfigProperties.IOT_HIVE_DATABASE)
-
 
     //val loadTime = "201707211525"
 /*    val loadTime = sc.getConf.get("spark.app.loadTime")

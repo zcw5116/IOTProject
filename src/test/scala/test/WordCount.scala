@@ -21,15 +21,11 @@ object WordCount {
     ssc.start()
     ssc.awaitTermination()*/
 
-    val m5timeid = "201707241520"
+    val intervalDay = 3
 
-    val dayid = m5timeid.substring(2,8)
-    val hourid = m5timeid.substring(8,10)
-    val m5id = m5timeid.substring(10,12)
-
-    println(dayid)
-    println(hourid)
-    println(m5id)
+    for(i <- 1 to intervalDay){
+           println(i)
+    }
 
   }
 

@@ -98,7 +98,7 @@ object IotSourceKafkaDeal extends GetProperties {
           .toDF()
           .registerTempTable("registerTempTable_pgwradius_out")
 
-        hiveContext.sql("insert into iot.pgwradius_out partition(dayid) " +
+        hiveContext.sql("insert into iotl.pgwradius_out partition(dayid) " +
           "select " +
           " APN, " +
           " Duration, " +
