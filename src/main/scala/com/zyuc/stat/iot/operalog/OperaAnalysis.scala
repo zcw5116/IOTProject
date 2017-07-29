@@ -17,13 +17,17 @@ object OperaAnalysis {
     val operaDay = sc.getConf.get("spark.app.operaDay")
 
     val cachedUserinfoTable = "iot_user_basic_info_cached"
-    sqlContext.sql("CACHE LAZY TABLE " + cachedUserinfoTable + "  as select u.mdn, " +
-      "case when length(u.vpdncompanycode)=0 then 'N999999999' else u.vpdncompanycode end  as vpdncompanycode " +
-      "from iot_user_basic_info u ").coalesce(1)
+    sqlContext.sql(
+      s"""CACHE LAZY TABLE ${cachedUserinfoTable} as
+         |select u.mdn, u.custprovince,
+         |       case when length(u.vpdncompanycode)=0 then 'N999999999' else u.vpdncompanycode end  as vpdncompanycode
+         |from iot_customer_userinfo u where u.d='${operaDay}'
+       """.stripMargin)
 
-    val userTypeSql =
+    // 同一天， 同一个号码 可能会先销户然后开户
+/*    val operaSql =
       s"""
-         |select nvl(t1.mdn, t2.mdn) as mdn, if(t1.mdn is not null, 1, 0) as g23flag, if(t2.mdn is not null, 1, 0) as g4flag,
+         |select nvl(t1.mdn, t2.mdn) as mdn,  if(t1.mdn is not null, 1, 0) as g23flag, if(t2.mdn is not null, 1, 0) as g4flag,
          |if(t1.mdn is not null and t2.mdn is not null ,1, 0) as g234flag, if(t1.mdn is not null, t1.opertype, t2.opertype) as opertype
          |from
          |    (
@@ -35,22 +39,42 @@ object OperaAnalysis {
          |        select l.mdn, l.opertype from  iot_opera_log l
          |        where l.platform='HSS' and l.d = '${operaDay}' and length(mdn)>0 and l.opertype in('开户','销户') and l.oper_result='成功'
          |    ) t2
-         |on(t1.mdn = t2.mdn)
+         |on(t1.mdn = t2.mdn and t1.opertype = t2.opertype)
+       """.stripMargin
+    */
+    // 同一天， 同一个号码 可能会先销户然后开户
+    val operaSql =
+      s"""
+         |select nvl(t1.mdn, t2.mdn) as mdn,
+         |case when(t1.mdn is not null and t2.mdn is null) then '2/3G' when (t1.mdn is null and t2.mdn is not null) then '4G' else '2/3/4G' end),
+         |if(t1.mdn is not null, t1.opertype, t2.opertype) as opertype
+         |from
+         |    (
+         |        select l.mdn, l.opertype from  iot_opera_log l
+         |        where l.platform='HLR' and l.d = '${operaDay}' and length(mdn)>0 and l.opertype in('开户','销户') and l.oper_result='成功'
+         |    ) t1
+         |full outer join
+         |    (
+         |        select l.mdn, l.opertype from  iot_opera_log l
+         |        where l.platform='HSS' and l.d = '${operaDay}' and length(mdn)>0 and l.opertype in('开户','销户') and l.oper_result='成功'
+         |    ) t2
+         |on(t1.mdn = t2.mdn and t1.opertype = t2.opertype)
        """.stripMargin
 
-    val userTypeTable = "userTypeTable"
-    sqlContext.sql(userTypeSql).registerTempTable(userTypeTable)
+
+    val operaTable = "operaTable" + operaDay
+    sqlContext.sql(operaSql).registerTempTable(operaTable)
 
     val resultSql =
       s"""
-         |select u.vpdncompanycode,
+         |select u.custprovince, u.vpdncompanycode,
          |sum(case when opertype='开户' and g23flag=1 then 1 else 0 end) g23opensum,
          |sum(case when opertype='销户' and g23flag=1 then 1 else 0 end) g23closesum,
          |sum(case when opertype='开户' and g4flag=1 then 1 else 0 end) g4opensum,
          |sum(case when opertype='销户' and g23flag=1 then 1 else 0 end) g4closesum,
          |sum(case when opertype='开户' and g234flag=1 then 1 else 0 end) g234opensum,
          |sum(case when opertype='销户' and g234flag=1 then 1 else 0 end) g234closesum
-         |from ${userTypeTable} t, ${cachedUserinfoTable} u where t.mdn = u.mdn
+         |from ${operaTable} t, ${cachedUserinfoTable} u where t.mdn = u.mdn
          |group by u.vpdncompanycode
        """.stripMargin
 

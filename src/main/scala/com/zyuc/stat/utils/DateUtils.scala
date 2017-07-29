@@ -80,5 +80,8 @@ object DateUtils {
     val test = timeInterval("201707271937","201707271938","yyyyMMddHHmm")
     println("test:"+test)
 
+    val dataDayid = "20170715"
+    val preDayid = DateUtils.timeCalcWithFormatConvertSafe(dataDayid, "yyyyMMdd", -1 * 24 * 60 * 60, "yyyyMMdd")
+    println(s"${preDayid}")
   }
 }
