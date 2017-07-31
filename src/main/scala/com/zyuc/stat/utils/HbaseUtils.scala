@@ -2,8 +2,9 @@ package com.zyuc.stat.utils
 
 import com.zyuc.stat.properties.ConfigProperties
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hbase.client.{Table, Connection, ConnectionFactory}
+import org.apache.hadoop.hbase.client._
 import org.apache.hadoop.hbase.mapred.TableOutputFormat
+import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.hbase.{HBaseConfiguration, HColumnDescriptor, HTableDescriptor, TableName}
 import org.apache.hadoop.mapred.JobConf
 
@@ -52,13 +53,33 @@ object HbaseUtils {
     }
   }
 
+  def getCloumnValueByRowkey(tableName:String, rowkey:String, family:String, cloumn:String): String ={
+    val conf = HBaseConfiguration.create()
+    conf.set("hbase.zookeeper.property.clientPort", ConfigProperties.IOT_ZOOKEEPER_CLIENTPORT)
+    conf.set("hbase.zookeeper.quorum", ConfigProperties.IOT_ZOOKEEPER_QUORUM)
+    val conn = ConnectionFactory.createConnection(conf)
+    val userTable = TableName.valueOf(tableName)
+    val table = conn.getTable(userTable)
+    val g = new Get(rowkey.getBytes)
+    val result = table.get(g)
+    val value = Bytes.toString(result.getValue(family.getBytes, cloumn.getBytes))
+    value
+  }
+
+  def updateCloumnValueByRowkey(tableName:String, rowkey:String, family:String, cloumn:String, value:String) ={
+    val conf = HBaseConfiguration.create()
+    conf.set("hbase.zookeeper.property.clientPort", ConfigProperties.IOT_ZOOKEEPER_CLIENTPORT)
+    conf.set("hbase.zookeeper.quorum", ConfigProperties.IOT_ZOOKEEPER_QUORUM)
+    val conn = ConnectionFactory.createConnection(conf)
+    val userTable = TableName.valueOf(tableName)
+    val table = conn.getTable(userTable)
+    val p = new Put(rowkey.getBytes)
+    p.addColumn(family.getBytes,cloumn.getBytes, value.getBytes())
+    table.put(p)
+  }
+
   def main(args: Array[String]): Unit = {
-    val tname = "tcrt1"
-    val fs = new Array[String](3)
-    fs(0) = "test1"
-    fs(1) = "test2"
-    fs(2) = "test3"
-    createIfNotExists(tname, fs)
+    getCloumnValueByRowkey("iot_dynamic_info","rowkey001","onlinebase","baseHourid")
 
   }
 

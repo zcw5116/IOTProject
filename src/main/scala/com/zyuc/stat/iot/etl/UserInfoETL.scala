@@ -46,10 +46,11 @@ object UserInfoETL extends Logging {
     val crttime = DateUtils.getNowTime("yyyy-MM-dd HH:mm:ss")
 
     val textDF = sqlContext.read.format("text").load(fileLocation)
-    val userDF = sqlContext.createDataFrame(textDF.map(x => UserInfoConverterUtils.parseLine(x.getString(0))), UserInfoConverterUtils.struct)
+    val userDF = sqlContext.createDataFrame(textDF.map(x => UserInfoConverterUtils.parseLine(x.getString(0))).filter(_.length != 1), UserInfoConverterUtils.struct)
 
     val tmpTable = appName + dataDayid
     userDF.registerTempTable(tmpTable)
+
 
 
     var resultDF: DataFrame = null
@@ -69,6 +70,7 @@ object UserInfoETL extends Logging {
       val incrTable = "incrTable" + preDayid
       val preDayUserTable = "preDayUserTable"
       sqlContext.table(userTable).filter(s"d = ${preDayid}").registerTempTable(preDayUserTable)
+      sqlContext.sql(s"select * from ${userTable} where d='${preDayid}' ").registerTempTable(preDayUserTable)
 
       val joinSql =
         s"""

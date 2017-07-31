@@ -2,15 +2,19 @@ package com.zyuc.stat.iot.user
 
 import com.zyuc.stat.properties.ConfigProperties
 import com.zyuc.stat.utils.DateUtils.timeCalcWithFormatConvertSafe
+import com.zyuc.stat.utils.{FileUtils, HbaseUtils}
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.hive.HiveContext
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.{Logging, SparkConf, SparkContext}
+
+import scala.collection.mutable
 
 
 /**
   * Created by zhoucw on 17-7-9.
   */
-object UserOnlineBaseData {
+object UserOnlineBaseData extends Logging{
 
   def main(args: Array[String]): Unit = {
 
@@ -22,11 +26,13 @@ object UserOnlineBaseData {
 
 
     val curHourtime = sc.getConf.get("spark.app.hourid") // 2017072412
-    val lastHourtime = timeCalcWithFormatConvertSafe(curHourtime, "yyyyMMddHH", -1*60*60, "yyyyMMddHH")
+    val outputPath = sc.getConf.get("spark.app.outputPath") // "/hadoop/IOT/ANALY_PLATFORM/UserOnline/"
+    val last7Hourtime = timeCalcWithFormatConvertSafe(curHourtime, "yyyyMMddHH", -7*60*60, "yyyyMMddHH")
     val dayidOfCurHourtime = curHourtime.substring(0, 8)
-    val dayidOfLastHourtime = lastHourtime.substring(0, 8)
+    val dayidOflast7Hourtime = last7Hourtime.substring(0, 8)
     val curHourid = curHourtime.substring(8, 10)
-    val lastHourid = lastHourtime.substring(8, 10)
+    val last7Hourid = last7Hourtime.substring(8, 10)
+    val curPartDayrid = dayidOfCurHourtime.substring(2,8)
 
     // 缓存用户的表
     val cachedUserinfoTable = "iot_user_basic_info_cached"
@@ -42,7 +48,41 @@ object UserOnlineBaseData {
 
 
     // 0点在线的用户
-    val g3usersql =
+    var commonSql = ""
+    if(dayidOfCurHourtime>dayidOflast7Hourtime){
+      commonSql =
+        s"""
+           |select t.mdn, t.account_session_id, t.acct_status_type
+           |from iot_cdr_3gaaa_ticket t
+           |where t.dayid='${dayidOflast7Hourtime}' and t.hourid>='${last7Hourid}'
+           |union all
+           |select t.mdn, t.account_session_id, t.acct_status_type
+           |from iot_cdr_3gaaa_ticket t
+           |where t.dayid='${dayidOfCurHourtime}' and t.hourid<='${curHourid}'
+         """.stripMargin
+    }else{
+      commonSql =
+        s"""
+           |select t.mdn, t.account_session_id, t.acct_status_type
+           |from iot_cdr_3gaaa_ticket t
+           |where t.dayid='${dayidOflast7Hourtime}'
+           |      and t.hourid>='${last7Hourid}' and t.hourid<='${curHourid}'
+           |""".stripMargin
+    }
+
+    val g3resultsql =
+      s""" select r.mdn from
+         |(
+         |    select t1.mdn, t2.mdn as mdn2 from
+         |        (select mdn, account_session_id from ( ${commonSql} ) l1 where l1.acct_status_type<>'2') t1
+         |    left join
+         |        (select mdn, account_session_id from ( ${commonSql} ) l2 where l2.acct_status_type='2' ) t2
+         |    on(t1.mdn=t2.mdn and t1.account_session_id=t2.account_session_id)
+         |) r
+         |where r.mdn2 is null
+       """.stripMargin
+
+ /*   val g3usersql =
       s"""select t1.mdn from
          |    (select t.mdn, t.account_session_id
          |     from iot_cdr_3gaaa_ticket t
@@ -54,10 +94,10 @@ object UserOnlineBaseData {
          |    ) t2
          |where t1.mdn=t2.mdn and t1.account_session_id=t2.account_session_id
          |
-       """.stripMargin
+       """.stripMargin*/
 
     val g3tmpuser  = "g3tmpuser" + curHourtime
-    sqlContext.sql(g3usersql).registerTempTable(g3tmpuser)
+    sqlContext.sql(g3resultsql).registerTempTable(g3tmpuser)
 
     val g3onlinecomptable = "g3onlinecomp" + curHourtime
 
@@ -79,8 +119,16 @@ object UserOnlineBaseData {
       """.stripMargin
     sqlContext.sql(pgwcompsql).coalesce(1)
 
-    val companyonlinesum =
+/*    val companyonlinesum =
       s"""select '${curHourtime}' as hourtime,c.vpdncompanycode, nvl(t1.g3cnt,0) as g3cnt, nvl(t2.pgwcnt,0) as pgwcnt
+         |from ${cachedCompanyTable} c
+         |left join ${g3onlinecomptable} t1 on(c.vpdncompanycode=t1.vpdncompanycode)
+         |left join ${pgwonlinecomptable} t2 on(c.vpdncompanycode=t2.vpdncompanycode)
+       """.stripMargin*/
+
+    // 暂时将g3置为0
+    val companyonlinesum =
+      s"""select '${curPartDayrid}' as d, '${curHourid}' as h,c.vpdncompanycode, 0 as g3cnt, nvl(t2.pgwcnt,0) as pgwcnt
          |from ${cachedCompanyTable} c
          |left join ${g3onlinecomptable} t1 on(c.vpdncompanycode=t1.vpdncompanycode)
          |left join ${pgwonlinecomptable} t2 on(c.vpdncompanycode=t2.vpdncompanycode)
@@ -93,10 +141,41 @@ object UserOnlineBaseData {
     //  fields terminated by '\t'
     //  location 'hdfs://hadoop11:9000/dir2';
 
+    val fileSystem = FileSystem.get(sc.hadoopConfiguration)
 
-    sqlContext.sql(companyonlinesum).coalesce(1).write.mode(SaveMode.Overwrite).format("orc").save(s"/hadoop/IOT/ANALY_PLATFORM/UserOnline/${curHourtime}")
+
+    val partitions = "d,h"
+
+    def getTemplate: String = {
+      var template = ""
+      val partitionArray = partitions.split(",")
+      for (i <- 0 until partitionArray.length)
+        template = template + "/" + partitionArray(i) + "=*"
+      template // rename original dir
+    }
+
+
+    sqlContext.sql(companyonlinesum).repartition(1).write.mode(SaveMode.Overwrite).format("orc").partitionBy(partitions.split(","): _*).save(outputPath + s"temp/${curHourtime}")
+    val outFiles = fileSystem.globStatus(new Path(outputPath + "temp/" + curHourtime + getTemplate + "/*.orc"))
+    val filePartitions = new mutable.HashSet[String]
+    for (i <- 0 until outFiles.length) {
+      val nowPath = outFiles(i).getPath.toString
+      filePartitions.+=(nowPath.substring(0, nowPath.lastIndexOf("/")).replace(outputPath + "temp/" + curHourtime, "").substring(1))
+    }
+
+    FileUtils.moveTempFiles(fileSystem, outputPath, curHourtime, getTemplate, filePartitions)
+
+
     //sqlContext.read.format("orc").load("/hadoop/IOT/ANALY_PLATFORM/UserOnline/20170709").registerTempTable("tttt")
     //sqlContext.sql("select vpdncompanycode, g3cnt, pgwcnt from tttt where vpdncompanycode='C000000517'").collect().foreach(println)
+    val sql = s"alter table iot_useronline_base_nums add IF NOT EXISTS partition(d='$curPartDayrid', h='$curHourid')"
+    logInfo("sql:" + sql)
+    sqlContext.sql(sql)
+
+    // 写入hbase表
+    HbaseUtils.updateCloumnValueByRowkey("iot_dynamic_info","rowkey001","onlinebase","baseHourid", curHourtime) // 从habase里面获取
+
+
     sc.stop()
 
     }

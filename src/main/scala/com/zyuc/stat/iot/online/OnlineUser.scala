@@ -34,8 +34,8 @@ object OnlineUser extends Logging {
     sqlContext.sql("use " + ConfigProperties.IOT_HIVE_DATABASE)
 
     val m5timeid = sc.getConf.get("spark.app.m5timeid")
-    val baseHourid = "" // 从habase里面获取
-    doOnlineDetail(sqlContext, m5timeid)
+    val baseHourid = HbaseUtils.getCloumnValueByRowkey("iot_dynamic_info","rowkey001","onlinebase","baseHourid") // 从habase里面获取
+    // doOnlineDetail(sqlContext, m5timeid)
     doCalcOnlineNums(sc, sqlContext, m5timeid, baseHourid)
 
 
@@ -73,8 +73,8 @@ object OnlineUser extends Logging {
   def doCalcOnlineNums(sc: SparkContext, sqlContext: HiveContext, m5timeid: String, baseHourid: String): Unit = {
     import sqlContext.implicits._
 
-    val m5timeid = "201707271600"
-    val baseHourid = "2017072700"
+    //val m5timeid = "201707271600"
+    //val baseHourid = "2017072700"
     // /hadoop/IOT/ANALY_PLATFORM/UserOnline/data/d=170727/h=00/
 
     // 计算时间点和基准数据时间点的间隔天数

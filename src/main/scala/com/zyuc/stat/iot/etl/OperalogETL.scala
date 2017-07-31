@@ -122,6 +122,8 @@ pcrfTmpDF: org.apache.spark.sql.DataFrame = [platform: string, detailinfo: strin
         sqlContext.sql(sql)
       }
     })
+
+    sc.stop()
   }
 
 }
