@@ -19,9 +19,10 @@ object MMEConverterUtils {
     if(mmetype == MME_HWSM_TYPE){
       newDF = mmeDF.selectExpr("T8 as procedureid", "T0 as starttime", "'' as acctype", "T5 as IMSI", "T6 as MSISDN",
         "T14 as sergw", "T13 as pcause", "T7 as imei", "'' as ci", "T12 as eNBID", "T24 as uemme", "'' as newgrpid",
-        "'' as newmmecode", "'' as newmtmsi", "'' as oldmcc", "'' as oldgrpid", "'' as oldmmecode", s"'$mmetype' as mmetype",
+        "'' as newmmecode", "'' as newmtmsi", "'' as oldmcc", "'' as oldgrpid", "'' as oldmmecode","'' as oldmtmsi",
+        "T99 as province", s"'$mmetype' as mmetype",
         s"case when T13='0x0000' then 'success' else 'failed' end as result",
-        "'' as oldmtmsi", "T99 as province", "substr(regexp_replace(T0,'-',''),3,6) as d", "substr(T0,12,2) as h", "floor(substr(T0,15,2)/5)*5 as m5")
+        "substr(regexp_replace(T0,'-',''),3,6) as d", "substr(T0,12,2) as h", "floor(substr(T0,15,2)/5)*5 as m5")
     }else{
       newDF = mmeDF.selectExpr("T8 as procedureid", "T0 as starttime", "T10 as acctype", "T5 as IMSI", "T6 as MSISDN",
         "T14 as sergw", "T13 as pcause", "T7 as imei", "T43 as ci", "T12 as eNBID", "T24 as uemme",

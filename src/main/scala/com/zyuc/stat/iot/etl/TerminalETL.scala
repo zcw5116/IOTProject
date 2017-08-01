@@ -41,6 +41,7 @@ object TerminalETL extends Logging {
 
     terminalDF.write.mode(SaveMode.Overwrite).format("orc").save(outputPath)
 
+
     logInfo("ETL success")
   }
 }
