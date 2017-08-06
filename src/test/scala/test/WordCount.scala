@@ -1,5 +1,6 @@
 package test
 
+import com.zyuc.stat.utils.DateUtils
 import com.zyuc.stat.utils.DateUtils.timeCalcWithFormatConvertSafe
 import org.apache.spark.SparkConf
 import org.apache.spark.streaming.{Seconds, StreamingContext}
@@ -8,24 +9,12 @@ import org.apache.spark.streaming.{Seconds, StreamingContext}
   * Created by slview on 17-7-11.
   */
 object WordCount {
-  def main (args: Array[String]) {
-/*    val sparkConf = new SparkConf().setAppName("TestWordCount").setMaster("local[4]")
+  def main (args: Array[String]): Unit = {
 
-    val ssc = new StreamingContext(sparkConf, Seconds(20))
-
-    val lines = ssc.textFileStream("file:///home/slview/data/test/word/")
-    val words = lines.flatMap(_.split(" "))
-
-    val wordCounts = words.map(x => (x, 1)).reduceByKey(_ + _)
-    wordCounts.print()
-    ssc.start()
-    ssc.awaitTermination()*/
-
-    val intervalDay = 3
-
-    for(i <- 1 to intervalDay){
-           println(i)
-    }
+    val beginMinu = "201708021400"
+    val endMinu = "201708031400"
+    val in = DateUtils.timeInterval(beginMinu.substring(0,8), endMinu.substring(0,8), "yyyymmdd")/(24*3600)
+    println("in:" + in)
 
   }
 

@@ -67,6 +67,7 @@ object DateUtils {
     targettime
   }
 
+  // 时间间隔 秒
   def timeInterval(beginTime:String, endTime:String, format:String):Long= {
     val fdf = FastDateFormat.getInstance(format)
     val beginDate:Date = fdf.parse(beginTime)
@@ -81,7 +82,7 @@ object DateUtils {
     println("test:"+test)
 
     val dataDayid = "20170715"
-    val preDayid = DateUtils.timeCalcWithFormatConvertSafe(dataDayid, "yyyyMMdd", -1 * 24 * 60 * 60, "yyyyMMdd")
+    val preDayid = DateUtils.timeCalcWithFormatConvertSafe(dataDayid, "yyyyMMdd", -1 * 24 * 60 * 60, "HH")
     println(s"${preDayid}")
   }
 }

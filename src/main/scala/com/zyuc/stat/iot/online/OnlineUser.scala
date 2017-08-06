@@ -148,7 +148,7 @@ object OnlineUser extends Logging {
 
     val onlineHbaseRDD = onlineDF.rdd.map(x => (x.getString(0), x.getDouble(1), x.getDouble(2)))
     val onlineRDD = onlineHbaseRDD.map { arr => {
-      val terminatePut = new Put(Bytes.toBytes(arr._1 + "-" + curHourM5.toString))
+      val terminatePut = new Put(Bytes.toBytes(arr._1 + "_" + curHourM5.toString))
       terminatePut.addColumn(Bytes.toBytes("info"), Bytes.toBytes("c_3g_cnt"), Bytes.toBytes(arr._2.toString))
       terminatePut.addColumn(Bytes.toBytes("info"), Bytes.toBytes("c_4g_cnt"), Bytes.toBytes(arr._3.toString))
       (new ImmutableBytesWritable, terminatePut)

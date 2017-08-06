@@ -2,7 +2,7 @@ package com.zyuc.stat.iot.etl
 
 import java.util.Date
 
-import com.zyuc.stat.iot.etl.util.CommonUtils.getTemplate
+import com.zyuc.stat.iot.etl.util.CommonETLUtils.getTemplate
 import com.zyuc.stat.properties.ConfigProperties
 import com.zyuc.stat.utils.{DateUtils, FileUtils}
 import org.apache.hadoop.fs.{FileSystem, Path}
