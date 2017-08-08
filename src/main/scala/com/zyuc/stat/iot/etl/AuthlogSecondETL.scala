@@ -120,7 +120,7 @@ object AuthlogSecondETL extends Logging {
       // 结果数据分区字段
       val partitions = "d,h"
       // 将数据存入到HDFS， 并刷新分区表
-      CommonETLUtils.saveDFtoPartition(sc, sqlContext, fileSystem, resultDF, coalesceNum, partitions, hourid, outputPath + authlogType + "/", authLogDayHourTable, appName)
+      CommonETLUtils.saveDFtoPartition(sqlContext, fileSystem, resultDF, coalesceNum, partitions, hourid, outputPath + authlogType + "/", authLogDayHourTable, appName)
     }
     catch {
       case e: Exception =>

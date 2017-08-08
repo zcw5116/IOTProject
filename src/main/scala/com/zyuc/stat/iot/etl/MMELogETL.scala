@@ -95,9 +95,9 @@ object MMELogETL extends Logging {
     if (hwmmFileExists) {
       val srchwmmDF = sqlContext.read.format("json").load(hwmmLocation)
       hwmmDF = MMEConverterUtils.parseMME(srchwmmDF, MMEConverterUtils.MME_HWMM_TYPE)
-      if (allDF == null) {
+      if (allDF == null && hwmmDF!=null) {
         allDF = hwmmDF
-      } else {
+      } else if(hwmmDF!=null) {
         allDF = allDF.unionAll(hwmmDF)
       }
     }
@@ -105,9 +105,9 @@ object MMELogETL extends Logging {
     if (hwsmFileExists) {
       val srchwsmDF = sqlContext.read.format("json").load(hwsmLocation)
       hwsmDF = MMEConverterUtils.parseMME(srchwsmDF, MMEConverterUtils.MME_HWSM_TYPE)
-      if (allDF == null) {
+      if (allDF == null && hwsmDF!=null) {
         allDF = hwsmDF
-      } else {
+      } else if(hwsmDF!=null){
         allDF = allDF.unionAll(hwsmDF)
       }
     }
@@ -115,9 +115,9 @@ object MMELogETL extends Logging {
     if (ztmmFileExists) {
       val srcztmmDF = sqlContext.read.format("json").load(ztmmLocation)
       ztmmDF = MMEConverterUtils.parseMME(srcztmmDF, MMEConverterUtils.MME_ZTMM_TYPE)
-      if (allDF == null) {
+      if (allDF == null && ztmmDF!=null) {
         allDF = ztmmDF
-      } else {
+      } else if(ztmmDF!=null) {
         allDF = allDF.unionAll(ztmmDF)
       }
     }
@@ -125,9 +125,9 @@ object MMELogETL extends Logging {
     if (ztsmFileExists) {
       val srcztsmDF = sqlContext.read.format("json").load(ztsmLocation)
       ztsmDF = MMEConverterUtils.parseMME(srcztsmDF, MMEConverterUtils.MME_ZTSM_TYPE)
-      if (allDF == null) {
+      if (allDF == null && ztsmDF!=null) {
         allDF = ztsmDF
-      } else {
+      } else if(ztsmDF!=null){
         allDF = allDF.unionAll(ztsmDF)
       }
     }
@@ -277,9 +277,9 @@ object MMELogETL extends Logging {
     if (hwmmFileExists) {
       val srchwmmDF = sqlContext.read.format("json").load(hwmmLocation)
       hwmmDF = MMEConverterUtils.parseMME(srchwmmDF, MMEConverterUtils.MME_HWMM_TYPE)
-      if (allDF == null) {
+      if (allDF == null && hwmmDF!=null) {
         allDF = hwmmDF
-      } else {
+      } else if(hwmmDF!=null) {
         allDF = allDF.unionAll(hwmmDF)
       }
     }
@@ -287,9 +287,9 @@ object MMELogETL extends Logging {
     if (hwsmFileExists) {
       val srchwsmDF = sqlContext.read.format("json").load(hwsmLocation)
       hwsmDF = MMEConverterUtils.parseMME(srchwsmDF, MMEConverterUtils.MME_HWSM_TYPE)
-      if (allDF == null) {
+      if (allDF == null && hwsmDF!=null) {
         allDF = hwsmDF
-      } else {
+      } else if(hwsmDF!=null){
         allDF = allDF.unionAll(hwsmDF)
       }
     }
@@ -297,9 +297,9 @@ object MMELogETL extends Logging {
     if (ztmmFileExists) {
       val srcztmmDF = sqlContext.read.format("json").load(ztmmLocation)
       ztmmDF = MMEConverterUtils.parseMME(srcztmmDF, MMEConverterUtils.MME_ZTMM_TYPE)
-      if (allDF == null) {
+      if (allDF == null && ztmmDF!=null) {
         allDF = ztmmDF
-      } else {
+      } else if(ztmmDF!=null) {
         allDF = allDF.unionAll(ztmmDF)
       }
     }
@@ -307,9 +307,9 @@ object MMELogETL extends Logging {
     if (ztsmFileExists) {
       val srcztsmDF = sqlContext.read.format("json").load(ztsmLocation)
       ztsmDF = MMEConverterUtils.parseMME(srcztsmDF, MMEConverterUtils.MME_ZTSM_TYPE)
-      if (allDF == null) {
+      if (allDF == null && ztsmDF!=null) {
         allDF = ztsmDF
-      } else {
+      } else if(ztsmDF!=null){
         allDF = allDF.unionAll(ztsmDF)
       }
     }

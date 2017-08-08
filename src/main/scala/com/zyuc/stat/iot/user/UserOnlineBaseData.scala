@@ -2,7 +2,7 @@ package com.zyuc.stat.iot.user
 
 import com.zyuc.stat.properties.ConfigProperties
 import com.zyuc.stat.utils.DateUtils.timeCalcWithFormatConvertSafe
-import com.zyuc.stat.utils.{FileUtils, HbaseUtils}
+import com.zyuc.stat.utils.{DateUtils, FileUtils, HbaseUtils}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.hive.HiveContext
@@ -27,21 +27,27 @@ object UserOnlineBaseData extends Logging{
 
     val curHourtime = sc.getConf.get("spark.app.hourid") // 2017072412
     val outputPath = sc.getConf.get("spark.app.outputPath") // "/hadoop/IOT/ANALY_PLATFORM/UserOnline/"
+    var userTablePartitionID = DateUtils.timeCalcWithFormatConvertSafe(curHourtime.substring(0,8), "yyyyMMdd", -1*24*3600, "yyyyMMdd")
+    userTablePartitionID = sc.getConf.get("spark.app.userTablePartitionID", userTablePartitionID)
+    val userTable = sc.getConf.get("spark.app.userTable") //"iot_customer_userinfo"
+    val pdsnTable = sc.getConf.get("spark.app.pdsnTable")
+    val pgwTable = sc.getConf.get("spark.app.pgwTable")
+
+
     val last7Hourtime = timeCalcWithFormatConvertSafe(curHourtime, "yyyyMMddHH", -7*60*60, "yyyyMMddHH")
-    val dayidOfCurHourtime = curHourtime.substring(0, 8)
-    val dayidOflast7Hourtime = last7Hourtime.substring(0, 8)
+    val dayidOfCurHourtime = curHourtime.substring(2, 8)
+    val dayidOflast7Hourtime = last7Hourtime.substring(2, 8)
     val curHourid = curHourtime.substring(8, 10)
     val last7Hourid = last7Hourtime.substring(8, 10)
-    val curPartDayrid = dayidOfCurHourtime.substring(2,8)
+    val curPartDayrid = dayidOfCurHourtime
+
+    val userDF = sqlContext.table(userTable).filter("d=" + userTablePartitionID).
+      selectExpr("mdn", "imsicdma", "custprovince", "case when length(vpdncompanycode)=0 then 'N999999999' else vpdncompanycode end  as vpdncompanycode")
 
     // 缓存用户的表
     val cachedUserinfoTable = "iot_user_basic_info_cached"
-    sqlContext.sql(
-      s"""
-         |CACHE TABLE ${cachedUserinfoTable} as
-         |select u.mdn,case when length(u.vpdncompanycode)=0 then 'N999999999' else u.vpdncompanycode end  as vpdncompanycode
-         |from iot_user_basic_info u
-       """.stripMargin).repartition(1)
+    userDF.cache().registerTempTable(cachedUserinfoTable)
+
 
     val cachedCompanyTable = "cachedCompany"
     sqlContext.sql(s"""CACHE TABLE ${cachedCompanyTable} as select distinct vpdncompanycode from ${cachedUserinfoTable}""")
@@ -53,20 +59,20 @@ object UserOnlineBaseData extends Logging{
       commonSql =
         s"""
            |select t.mdn, t.account_session_id, t.acct_status_type
-           |from iot_cdr_3gaaa_ticket t
-           |where t.dayid='${dayidOflast7Hourtime}' and t.hourid>='${last7Hourid}'
+           |from ${pdsnTable} t
+           |where t.d='${dayidOflast7Hourtime}' and t.h>='${last7Hourid}'
            |union all
            |select t.mdn, t.account_session_id, t.acct_status_type
-           |from iot_cdr_3gaaa_ticket t
-           |where t.dayid='${dayidOfCurHourtime}' and t.hourid<='${curHourid}'
+           |from ${pdsnTable} t
+           |where t.d='${dayidOfCurHourtime}' and t.h<='${curHourid}'
          """.stripMargin
     }else{
       commonSql =
         s"""
            |select t.mdn, t.account_session_id, t.acct_status_type
-           |from iot_cdr_3gaaa_ticket t
-           |where t.dayid='${dayidOflast7Hourtime}'
-           |      and t.hourid>='${last7Hourid}' and t.hourid<='${curHourid}'
+           |from ${pdsnTable} t
+           |where t.d='${dayidOflast7Hourtime}'
+           |      and t.h>='${last7Hourid}' and t.h<='${curHourid}'
            |""".stripMargin
     }
 
@@ -112,8 +118,8 @@ object UserOnlineBaseData extends Logging{
     val pgwcompsql =
      s"""CACHE TABLE ${pgwonlinecomptable} as select o.vpdncompanycode, count(*) as pgwcnt
         |from ( SELECT u.mdn, u.vpdncompanycode
-        |       FROM iot_user_basic_info u LEFT SEMI JOIN iot_cdr_pgw_ticket t
-        |       ON  (u.mdn = t.mdn and t.dayid='${dayidOfCurHourtime}' and t.l_timeoffirstusage < '${timeOfFirstUsageStr}' and t.hourid>=${curHourid})
+        |       FROM ${cachedUserinfoTable} u LEFT SEMI JOIN ${pgwTable} t
+        |       ON  (u.mdn = t.mdn and t.d='${dayidOfCurHourtime}' and t.l_timeoffirstusage < '${timeOfFirstUsageStr}' and t.h>=${curHourid})
         |     ) o
         |group by o.vpdncompanycode
       """.stripMargin

@@ -9,7 +9,8 @@ import java.util.concurrent.Executors
 
 import com.alibaba.fastjson.JSON
 import com.sun.net.httpserver.{Headers, HttpExchange, HttpHandler, HttpServer}
-import com.zyuc.stat.iot.etl.MMELogETL
+import com.zyuc.stat.iot.etl.CDRETL.doJob
+import com.zyuc.stat.iot.etl.{CDRETL, MMELogETL}
 import com.zyuc.stat.properties.ConfigProperties
 import org.apache.hadoop.fs.FileSystem
 import org.apache.spark.sql.SQLContext
@@ -23,10 +24,9 @@ object ConvertServer {
     val sparkConf = new SparkConf()//.setAppName("ConvertServer").setMaster("local[2]")
     val sc = new SparkContext(sparkConf)
     val sqlContext = new HiveContext(sc)
-
+    val port = sc.getConf.get("spark.server.port", "9999")
     val fileSystem = FileSystem.get(sc.hadoopConfiguration)
-
-    createServer(9999, sqlContext, fileSystem)
+    createServer(port.toInt, sqlContext, fileSystem)
   }
 
   def createServer(port: Int, sqlContext: SQLContext, fileSystem: FileSystem): Unit = {
@@ -36,7 +36,7 @@ object ConvertServer {
     httpServer.createContext("/convert", new HttpHandler() {
       override def handle(httpExchange: HttpExchange): Unit = {
         System.out.println("处理新请求:" + httpExchange.getRequestMethod + " , " + httpExchange.getRequestURI)
-        var response = "成功"
+        var response = "正常"
         var httpCode = 200
         val requestHeaders = httpExchange.getRequestHeaders
         val contentLength = requestHeaders.getFirst("Content-length").toInt
@@ -69,6 +69,17 @@ object ConvertServer {
             val ztsmWildcard = Params.getString("ztsmWildcard")
             serverInfo = "未知异常"
             serverInfo = MMELogETL.doJob(sqlContext,fileSystem, appName, loadTime, inputPath, outputPath, hwmmWildcard, hwsmWildcard, ztmmWildcard, ztsmWildcard)
+          }else if(serverLine == "cdrETL"){
+            val appName = Params.getString("appName")
+            val loadTime = Params.getString("loadTime")
+            val inputPath = Params.getString("inputPath")
+            val fileWildcard = Params.getString("fileWildcard")
+            val outputPath = Params.getString("outputPath")
+            val coalesceSize = Params.getString("coalesceSize")
+            val logType = Params.getString("logType")
+            val logTableName = Params.getString("logTableName")
+            serverInfo = "未知异常"
+            serverInfo = CDRETL.doJob(sqlContext, fileSystem, appName, loadTime, inputPath, outputPath, fileWildcard, coalesceSize.toInt, logType, logTableName)
           }
           else{
             System.out.println("go")
@@ -81,7 +92,7 @@ object ConvertServer {
             httpCode = 500
         }
 
-        response = serverInfo + "HttpServerStatus: " + response
+        response = "HttpServerStatus: " + response + ". " + serverInfo
 
         httpExchange.sendResponseHeaders(httpCode, response.getBytes.length)
         val responseBody: OutputStream = httpExchange.getResponseBody

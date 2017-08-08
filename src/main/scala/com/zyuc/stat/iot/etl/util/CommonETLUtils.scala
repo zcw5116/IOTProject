@@ -7,7 +7,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{Logging, SparkContext}
-import org.apache.spark.sql.{DataFrame, SaveMode}
+import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 
 import scala.collection.mutable
 
@@ -27,7 +27,7 @@ object CommonETLUtils extends Logging {
   }
 
 
-  def saveDFtoPartition(sc: SparkContext, sqlContext: HiveContext, fileSystem: FileSystem, df: DataFrame, coalesceNum: Int, partitions: String, loadtime: String, outputPath: String, partitonTable: String, appName: String) = {
+  def saveDFtoPartition(sqlContext: SQLContext, fileSystem: FileSystem, df: DataFrame, coalesceNum: Int, partitions: String, loadtime: String, outputPath: String, partitonTable: String, appName: String):String = {
 
     try {
       var begin = new Date().getTime
@@ -75,20 +75,25 @@ object CommonETLUtils extends Logging {
         }
         logInfo(s"partition $sql")
         if (sql.nonEmpty) {
-          sqlContext.sql(sql)
+          try {
+            sqlContext.sql(sql)
+          }catch {
+            case e:Exception => {
+              logError(s"partition $sql excute failed " + e.getMessage)
+            }
+          }
         }
       })
       logInfo("[" + appName + "] 刷新分区表用时 " + (new Date().getTime - begin) + " ms")
+      return "[" + appName + "]  ETL  success."
     } catch {
       case e: Exception => {
         e.printStackTrace()
         SparkHadoopUtil.get.globPath(new Path(outputPath + "temp/" + loadtime)).map(fileSystem.delete(_, true))
         logError("[" + appName + "] 失败 处理异常" + e.getMessage)
+        return "[" + appName + "] 失败 处理异常"
       }
-    }finally {
-
     }
-
   }
 
 

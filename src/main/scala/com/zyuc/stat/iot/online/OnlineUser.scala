@@ -32,11 +32,31 @@ object OnlineUser extends Logging {
     val sc = new SparkContext(sparkConf)
     val sqlContext = new HiveContext(sc)
     sqlContext.sql("use " + ConfigProperties.IOT_HIVE_DATABASE)
-
+    val onlineType = sc.getConf.get("spark.app.onlineType") //"sum, detail"
     val m5timeid = sc.getConf.get("spark.app.m5timeid")
-    val baseHourid = HbaseUtils.getCloumnValueByRowkey("iot_dynamic_info","rowkey001","onlinebase","baseHourid") // 从habase里面获取
-    // doOnlineDetail(sqlContext, m5timeid)
-    doCalcOnlineNums(sc, sqlContext, m5timeid, baseHourid)
+
+    if(onlineType!="sum" && onlineType!="detail") {
+      logError("onlineType para error, expected: sum, detail")
+      return
+    }
+
+    if(onlineType == "sum"){
+      val baseHourid = HbaseUtils.getCloumnValueByRowkey("iot_dynamic_info","rowkey001","onlinebase","baseHourid") // 从habase里面获取
+      // doOnlineDetail(sqlContext, m5timeid)
+      doCalcOnlineNums(sc, sqlContext, m5timeid, baseHourid)
+    } else if(onlineType == "detail") {
+      val userTable = sc.getConf.get("spark.app.userTable") //"iot_customer_userinfo"
+      var userTablePartitionID = DateUtils.timeCalcWithFormatConvertSafe(m5timeid.substring(0,8), "yyyyMMdd", -1*24*3600, "yyyyMMdd")
+      userTablePartitionID = sc.getConf.get("spark.app.userTablePartitionDayID", userTablePartitionID)
+
+      doOnlineDetail(sqlContext, m5timeid, userTable, userTablePartitionID)
+    }
+
+
+
+
+
+
 
 
   }
@@ -159,22 +179,21 @@ object OnlineUser extends Logging {
   }
 
 
-  def doOnlineDetail(sqlContext: HiveContext, m5timeid: String) = {
+  def doOnlineDetail(sqlContext: HiveContext, m5timeid: String, userTable:String, userTablePartitionID:String) = {
 
-    val m5timeid = "201707280900"
+    // val m5timeid = "201707280900"
     val startTime = m5timeid + "00" // 转换到s
     val endTime = DateUtils.timeCalcWithFormatConvertSafe(startTime, "yyyyMMddHHmmss", 5 * 60, "yyyyMMddHHmmss")
     val dayid = startTime.substring(0, 8)
     val curHourM5 = startTime.substring(8, 12)
     val nextHourM5 = endTime.substring(8, 12)
 
+
     val cachedUserinfoTable = "iot_user_basic_info_cached"
-    sqlContext.sql(
-      s"""
-         |CACHE TABLE ${cachedUserinfoTable} as
-         |select u.mdn,case when length(u.vpdncompanycode)=0 then 'N999999999' else u.vpdncompanycode end  as vpdncompanycode
-         |from iot_user_basic_info u
-       """.stripMargin).coalesce(1)
+    val userDF = sqlContext.table(userTable).filter("d=" + userTablePartitionID).
+      selectExpr("mdn", "custprovince", "case when length(vpdncompanycode)=0 then 'N999999999' else vpdncompanycode end  as vpdncompanycode")
+    userDF.cache().registerTempTable(cachedUserinfoTable)
+
 
     val radiusTable = "radiusTable" + m5timeid
     sqlContext.sql(
@@ -221,13 +240,13 @@ object OnlineUser extends Logging {
        * 所有插入的数据必须用org.apache.hadoop.hbase.util.Bytes.toBytes方法转换
        * Put.add方法接收三个参数：列族，列名，数据
        */
-      val curPut = new Put(Bytes.toBytes(arr._1 + "-" + curHourM5.toString))
+      val curPut = new Put(Bytes.toBytes(arr._1 + "_" + curHourM5.toString))
       curPut.addColumn(Bytes.toBytes("lineinfo"), Bytes.toBytes("3gStart"), Bytes.toBytes(arr._2.toString))
       curPut.addColumn(Bytes.toBytes("lineinfo"), Bytes.toBytes("3gStop"), Bytes.toBytes(arr._3.toString))
       curPut.addColumn(Bytes.toBytes("lineinfo"), Bytes.toBytes("4gStart"), Bytes.toBytes(arr._4.toString))
       curPut.addColumn(Bytes.toBytes("lineinfo"), Bytes.toBytes("4gStop"), Bytes.toBytes(arr._5.toString))
 
-      val nextPut = new Put(Bytes.toBytes(arr._1 + "-" + nextHourM5.toString))
+      val nextPut = new Put(Bytes.toBytes(arr._1 + "_" + nextHourM5.toString))
       nextPut.addColumn(Bytes.toBytes("lineinfo"), Bytes.toBytes("p_3gStart"), Bytes.toBytes(arr._2.toString))
       nextPut.addColumn(Bytes.toBytes("lineinfo"), Bytes.toBytes("p_3gStop"), Bytes.toBytes(arr._3.toString))
       nextPut.addColumn(Bytes.toBytes("lineinfo"), Bytes.toBytes("p_4gStart"), Bytes.toBytes(arr._4.toString))
@@ -252,7 +271,7 @@ object OnlineUser extends Logging {
     val radiusTermiateDF = sqlContext.sql(radiusTermiateSql).coalesce(1)
     val termiateHbaseRDD = radiusTermiateDF.rdd.map(x => (x.getString(0), x.getString(1), x.getLong(2), x.getLong(3)))
     val terminateRDD = termiateHbaseRDD.map { arr => {
-      val terminatePut = new Put(Bytes.toBytes(arr._1 + "-" + curHourM5.toString))
+      val terminatePut = new Put(Bytes.toBytes(arr._1 + "_" + curHourM5.toString))
       terminatePut.addColumn(Bytes.toBytes("termcase"), Bytes.toBytes(arr._2 + "_3g_cnt"), Bytes.toBytes(arr._3.toString))
       terminatePut.addColumn(Bytes.toBytes("termcase"), Bytes.toBytes(arr._2 + "_4g_cnt"), Bytes.toBytes(arr._4.toString))
       (new ImmutableBytesWritable, terminatePut)
