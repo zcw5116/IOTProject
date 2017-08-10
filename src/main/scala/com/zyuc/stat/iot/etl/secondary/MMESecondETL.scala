@@ -1,16 +1,16 @@
-package com.zyuc.stat.iot.etl
+package com.zyuc.stat.iot.etl.secondary
 
 import java.util.Date
 
 import com.zyuc.stat.iot.etl.util.CommonETLUtils.getTemplate
 import com.zyuc.stat.properties.ConfigProperties
+import com.zyuc.stat.utils.FileUtils.makeCoalesce
 import com.zyuc.stat.utils.{DateUtils, FileUtils}
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.spark.{Logging, SparkConf, SparkContext}
-import org.apache.spark.sql.hive.HiveContext
-import com.zyuc.stat.utils.FileUtils.makeCoalesce
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.{Logging, SparkConf, SparkContext}
 
 import scala.collection.mutable
 

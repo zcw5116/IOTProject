@@ -27,8 +27,7 @@ object UserOnlineBaseData extends Logging{
 
     val curHourtime = sc.getConf.get("spark.app.hourid") // 2017072412
     val outputPath = sc.getConf.get("spark.app.outputPath") // "/hadoop/IOT/ANALY_PLATFORM/UserOnline/"
-    var userTablePartitionID = DateUtils.timeCalcWithFormatConvertSafe(curHourtime.substring(0,8), "yyyyMMdd", -1*24*3600, "yyyyMMdd")
-    userTablePartitionID = sc.getConf.get("spark.app.userTablePartitionID", userTablePartitionID)
+    val userTablePartitionID = sc.getConf.get("spark.app.userTablePartitionID")
     val userTable = sc.getConf.get("spark.app.userTable") //"iot_customer_userinfo"
     val pdsnTable = sc.getConf.get("spark.app.pdsnTable")
     val pgwTable = sc.getConf.get("spark.app.pgwTable")
@@ -43,7 +42,7 @@ object UserOnlineBaseData extends Logging{
 
     val userDF = sqlContext.table(userTable).filter("d=" + userTablePartitionID).
       selectExpr("mdn", "imsicdma", "custprovince", "case when length(vpdncompanycode)=0 then 'N999999999' else vpdncompanycode end  as vpdncompanycode")
-
+    userDF.show()
     // 缓存用户的表
     val cachedUserinfoTable = "iot_user_basic_info_cached"
     userDF.cache().registerTempTable(cachedUserinfoTable)
@@ -52,7 +51,7 @@ object UserOnlineBaseData extends Logging{
     val cachedCompanyTable = "cachedCompany"
     sqlContext.sql(s"""CACHE TABLE ${cachedCompanyTable} as select distinct vpdncompanycode from ${cachedUserinfoTable}""")
 
-
+    sqlContext.table(cachedCompanyTable).show()
     // 0点在线的用户
     var commonSql = ""
     if(dayidOfCurHourtime>dayidOflast7Hourtime){
@@ -124,6 +123,7 @@ object UserOnlineBaseData extends Logging{
         |group by o.vpdncompanycode
       """.stripMargin
     sqlContext.sql(pgwcompsql).coalesce(1)
+    sqlContext.sql(pgwcompsql).show()
 
 /*    val companyonlinesum =
       s"""select '${curHourtime}' as hourtime,c.vpdncompanycode, nvl(t1.g3cnt,0) as g3cnt, nvl(t2.pgwcnt,0) as pgwcnt
@@ -160,7 +160,8 @@ object UserOnlineBaseData extends Logging{
       template // rename original dir
     }
 
-
+    logInfo("companyonlinesum:" + companyonlinesum)
+    sqlContext.sql(companyonlinesum).show()
     sqlContext.sql(companyonlinesum).repartition(1).write.mode(SaveMode.Overwrite).format("orc").partitionBy(partitions.split(","): _*).save(outputPath + s"temp/${curHourtime}")
     val outFiles = fileSystem.globStatus(new Path(outputPath + "temp/" + curHourtime + getTemplate + "/*.orc"))
     val filePartitions = new mutable.HashSet[String]

@@ -1,6 +1,6 @@
 package com.zyuc.stat.iot.etl
 
-import com.zyuc.stat.iot.etl.AuthlogSecondETL.{logError, logInfo}
+import com.zyuc.stat.iot.etl.secondary.AuthlogSecondETL.{logError, logInfo}
 import com.zyuc.stat.iot.etl.MMELogETL.logInfo
 import com.zyuc.stat.iot.etl.util.{AuthLogConverterUtils, CommonETLUtils}
 import com.zyuc.stat.properties.ConfigProperties

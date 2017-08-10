@@ -2,7 +2,7 @@ package com.zyuc.stat.iot.etl.util
 
 import org.apache.spark.sql.{DataFrame, Row}
 import com.alibaba.fastjson.JSON
-import com.zyuc.stat.iot.etl.AuthlogSecondETL.logError
+import com.zyuc.stat.iot.etl.secondary.AuthlogSecondETL.logError
 import org.apache.spark.Logging
 
 

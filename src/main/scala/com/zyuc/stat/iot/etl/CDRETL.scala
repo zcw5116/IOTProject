@@ -22,7 +22,7 @@ object CDRETL extends Logging{
 
     val loadTime = "201708071205"
     val inputPath = "hdfs://cdh-nn1:8020/hadoop/IOT/data/cdr/pdsn/srcdata/"
-    val outputPath = "hdfs://cdh-nn1:8020/hadoop/IOT/data/cdr/pdsn/output/"
+    val outputPath = "hdfs://cdh-nn1:8020/hadoop/IOT/data/cdr/output/pdsn/"
 
     //val inputPath = "hdfs://cdh-nn1:8020/hadoop/IOT/data/cdr/pgw/srcdata/"
     //val outputPath = "hdfs://cdh-nn1:8020/hadoop/IOT/data/cdr/pgw/output/"

@@ -34,7 +34,7 @@ object CDRConverterUtils extends Logging{
           "T50  as  granted_qos_parameters","T51  as  container","T52  as  acct_authentic",
           "T53  as  acct_session_time","T54  as  acct_input_packets","T55  as  acct_output_packets",
           "T56  as  acct_terminate_cause","T57  as  acct_input_gigawords","T58  as  acct_output_gigawords",
-          "T59  as  session_id","T6  as  esn","T60  as  chtel_otherarea_access_id","T61  as  pmip_indicator",
+          "T59  as  session_id","T6  as  esn","T60  as  chteprl_otherarea_access_id","T61  as  pmip_indicator",
           "T62  as  ip_services_authorized","T63  as  pdsn_ipv6_address","T64  as  home_agent_ipv6_address",
           "T65  as  foreign_agent_ipv6_address","T66  as  pcf_ipv6_address","T7  as  meid","T8  as  source_ip_address",
           "T800  as  acce_province","T801  as  acce_region","T802  as  sid","T803  as  nid","T804  as  siteid",
