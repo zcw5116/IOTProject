@@ -110,6 +110,53 @@ object FileUtils extends Logging{
 
   }
 
+
+  def moveTempFilesToData(fileSystem: FileSystem, outputPath: String, loadTime: String, template: String, partitions: mutable.HashSet[String], fileFormat:String="orc"): Unit = {
+
+    var srcFileSuffix = "."+fileFormat
+    if(fileFormat=="csv" || fileFormat=="json"){
+      srcFileSuffix=""
+    }
+
+    // 删除数据目录到文件
+    partitions.foreach(partition => {
+      logInfo("partition" + partition)
+      logInfo(outputPath + "data/" + partition + "/" + loadTime + "-" + "*" + srcFileSuffix)
+      val dataPath = new Path(outputPath + "data/" + partition + "/" + loadTime + "-" + "*" + srcFileSuffix)
+      fileSystem.globStatus(dataPath).foreach(x=> fileSystem.delete(x.getPath(),false)
+      )
+      // fileSystem.delete(dataPath, false)
+      fileSystem
+    })
+
+    val tmpPath = new Path(outputPath + "temp/" + loadTime + template + "/part*"+srcFileSuffix)
+    val tmpStatus = fileSystem.globStatus(tmpPath)
+
+    var num = 0
+    tmpStatus.map(tmpStat => {
+      val tmpLocation = tmpStat.getPath().toString
+      var dataLocation = tmpLocation.replace(outputPath + "temp/" + loadTime, outputPath + "data/")
+      val index = dataLocation.lastIndexOf("/")
+      dataLocation = dataLocation.substring(0, index + 1) + loadTime + "-" + num + "."+fileFormat
+      num = num + 1
+
+      val tmpPath = new Path(tmpLocation)
+      val dataPath = new Path(dataLocation)
+
+      if (!fileSystem.exists(dataPath.getParent)) {
+        fileSystem.mkdirs(dataPath.getParent)
+      }
+      fileSystem.rename(tmpPath, dataPath)
+
+    })
+
+
+
+    //获取文件列表
+    // val files = fileSystem.listStatus(path)
+
+  }
+
   def moveNewlogFiles(outputPath:String, outFiles:Array[FileStatus], loadTime:String) :Unit = {
     var num = 1
     outFiles.foreach(filestatus=>{
@@ -151,6 +198,10 @@ object FileUtils extends Logging{
     val config = new Configuration
     var fileSystem: FileSystem = null
     fileSystem = FileSystem.get(config)
+    val coalesceSize = 1
+    val filePath = "/hadoop/IOT/ANALY_PLATFORM/OperaLog/PCRF/*tar*"
+    makeCoalesce(fileSystem, filePath, coalesceSize)
+
 /*
     try {
 

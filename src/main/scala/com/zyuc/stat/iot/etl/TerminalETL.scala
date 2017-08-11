@@ -19,9 +19,9 @@ object TerminalETL extends Logging {
     sqlContext.sql("use " + ConfigProperties.IOT_HIVE_DATABASE)
 
     val inputPath = sc.getConf.get("spark.app.inputPath")
-    //val inputPath = "/hadoop/IOT/ANALY_PLATFORM/BasicData/IOTTerminal/source"
+    //val inputPath = "/hadoop/IOT/data/terminal/srcdata/"
     val outputPath = sc.getConf.get("spark.app.outputPath")
-    //val outputPath = "/hadoop/IOT/ANALY_PLATFORM/BasicData/IOTTerminal/data"
+    //val outputPath = "/hadoop/IOT/data/terminal/output/data"
     val fileWildcard = sc.getConf.get("spark.app.fileWildcard")
     // val fileWildcard = "iot_dim_terminal.txt"
     val fileLocation = inputPath + "/" + fileWildcard
@@ -39,7 +39,7 @@ object TerminalETL extends Logging {
 
     terminalDF = sqlContext.createDataFrame(terminalDF.map(x =>TerminalConvertUtils.parseLine(x.getString(0))), TerminalConvertUtils.struct)
 
-    terminalDF.write.mode(SaveMode.Overwrite).format("orc").save(outputPath)
+    terminalDF.coalesce(1).write.mode(SaveMode.Overwrite).format("orc").save(outputPath)
 
 
     logInfo("ETL success")
