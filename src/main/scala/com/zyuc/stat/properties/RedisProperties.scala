@@ -32,3 +32,4 @@ object RedisProperties {
     return tuple
   }
 }
+
