@@ -67,7 +67,7 @@ object InterPhoneCDR {
 
     val suffix = "_" + dayid + ".csv"
     val fileSystem = FileSystem.get(sc.hadoopConfiguration)
-    downloadFileFromHdfs(fileSystem, hdfsDirLocation:String, localDirLocation:String, suffix:String)
+    downloadFileFromHdfs(fileSystem, hdfsDirLocation, localDirLocation, suffix)
     // resultDF.saveAsCsvFile("file:///tmp/csv/pdsn.csv")
   }
 }

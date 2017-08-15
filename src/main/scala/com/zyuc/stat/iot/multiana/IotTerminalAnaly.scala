@@ -1,7 +1,7 @@
 package com.zyuc.stat.iot.multiana
 
-import com.zyuc.stat.iot.etl.util.CommonETLUtils
 import com.zyuc.stat.properties.ConfigProperties
+import com.zyuc.stat.utils.FileUtils
 import org.apache.hadoop.fs.FileSystem
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.hive.HiveContext
@@ -21,6 +21,7 @@ object IotTerminalAnaly extends Logging{
     val userTablePartitionDayid = sc.getConf.get("spark.app.user.userTablePartitionDayid")  //  "20170801"
     val terminalInputPath = sc.getConf.get("spark.app.terminalInputPath")  // /hadoop/IOT/data/terminal/output/data/
     val terminalOutputPath = sc.getConf.get("spark.app.terminalOutputPath")  // /hadoop/IOT/data/terminal/output/
+    val localOutputPath = sc.getConf.get("spark.app.localOutputPath")  // /slview/test/zcw/shell/terminal/json/
     val terminalResultTable = sc.getConf.get("spark.app.terminalResultTable")
     val appName = sc.getConf.get("spark.app.name") // terminalmultiAnalysis_2017073111
     val coalesceNum = sc.getConf.get("spark.app.coalesceNum", "1")
@@ -38,14 +39,20 @@ object IotTerminalAnaly extends Logging{
     val aggDF = userDF.join(terminalDF, userDF.col("imei").substr(0,8)===terminalDF.col("tac"), "left").
       groupBy(userDF.col("custprovince"), userDF.col("vpdncompanycode"), terminalDF.col("devicetype"),
         terminalDF.col("modelname")).agg(count(lit(1)).alias("ter_cnt"))
-    val resultDF = aggDF.select(lit(userTablePartitionDayid).alias("dayid"), aggDF.col("custprovince"), aggDF.col("vpdncompanycode"),
-      aggDF.col("devicetype"), aggDF.col("modelname"), aggDF.col("ter_cnt"))
+    // 处理空值
+    val resultDF = aggDF.select(lit(userTablePartitionDayid).alias("dayid"),
+      when(aggDF.col("custprovince").isNull, "").otherwise(aggDF.col("custprovince")).alias("custprovince"),
+      when(aggDF.col("vpdncompanycode").isNull, "").otherwise(aggDF.col("vpdncompanycode")).alias("vpdncompanycode"),
+      when(aggDF.col("devicetype").isNull, "").otherwise(aggDF.col("devicetype")).alias("devicetype"),
+      when(aggDF.col("modelname").isNull, "").otherwise(aggDF.col("modelname")).alias("modelname"),
+      aggDF.col("ter_cnt"))
 
 
-    val terminalOutputLocatoin = terminalOutputPath + "json/"
-    val partitions = "dayid"
-    // 将数据存入到HDFS， 并刷新分区表
-    CommonETLUtils.saveDFtoFile(sqlContext, fileSystem, resultDF, coalesceNum.toInt, partitions, userTablePartitionDayid, terminalOutputLocatoin, terminalResultTable, appName,"json")
+    val terminalOutputLocatoin = terminalOutputPath + "json/data/" + userTablePartitionDayid
+
+    resultDF.repartition(coalesceNum.toInt).write.mode(SaveMode.Overwrite).format("json").save(terminalOutputLocatoin)
+
+    FileUtils.downFilesToLocal(fileSystem, terminalOutputLocatoin, localOutputPath, userTablePartitionDayid, ".json")
 
   }
 }

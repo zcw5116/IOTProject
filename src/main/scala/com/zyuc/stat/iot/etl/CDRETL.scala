@@ -1,6 +1,7 @@
 package com.zyuc.stat.iot.etl
 
 import com.zyuc.stat.iot.etl.AuthLogETL.{doJob, logError, logInfo}
+import com.zyuc.stat.iot.etl.MMELogETL.logInfo
 import com.zyuc.stat.iot.etl.util.{AuthLogConverterUtils, CDRConverterUtils, CommonETLUtils}
 import com.zyuc.stat.properties.ConfigProperties
 import com.zyuc.stat.utils.FileUtils.{makeCoalesce, renameHDFSDir}
@@ -58,8 +59,7 @@ object CDRETL extends Logging{
 
     val srcLocation = inputPath + "/" + loadTime
 
-    //  val fileExists = if (fileSystem.globStatus(new Path(srcLocation + "/*")).length > 0) true else false
-    val fileExists = true
+    val fileExists = if (fileSystem.globStatus(new Path(srcLocation + "/*")).length > 0) true else false
     if (!fileExists) {
       logInfo(s"$srcLocation not exists.")
       return s"$srcLocation not exists."
@@ -103,6 +103,18 @@ object CDRETL extends Logging{
     // 结果数据分区字段
     val partitions = "d,h,m5"
     // 将数据存入到HDFS， 并刷新分区表
-    return CommonETLUtils.saveDFtoPartition(sqlContext, fileSystem, authDF, coalesceNum, partitions, loadTime, outputPath, logTableName, appName)
+    val executeResult = CommonETLUtils.saveDFtoPartition(sqlContext, fileSystem, authDF, coalesceNum, partitions, loadTime, outputPath, logTableName, appName)
+
+    val srcDoneLocation = inputPath + "/" + loadTime + "_done"
+    val isDoneRename = renameHDFSDir(fileSystem, srcDoingLocation, srcDoneLocation)
+    var doneResult = "Success"
+    if (!isDoneRename) {
+      doneResult = "Failed"
+      logInfo(s"$srcDoingLocation rename to $srcDoneLocation :" + doneResult)
+      return "appName:" + appName + ": " + s"$srcDoingLocation rename to $srcDoneLocation :" + doneResult + ". "
+    }
+    logInfo(s"$srcDoingLocation rename to $srcDoneLocation :" + doneResult)
+
+    executeResult
   }
 }

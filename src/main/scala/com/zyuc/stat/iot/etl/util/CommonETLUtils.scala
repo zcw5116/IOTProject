@@ -98,43 +98,4 @@ object CommonETLUtils extends Logging {
   }
 
 
-  def saveDFtoFile(sqlContext: SQLContext, fileSystem: FileSystem, df: DataFrame, coalesceNum: Int, partitions: String, loadtime: String, outputPath: String, partitonTable: String, appName: String, fileFormat:String="orc"):String = {
-
-    try {
-      var begin = new Date().getTime
-
-      val partitionTemplate = getTemplate(partitions)
-      df.repartition(coalesceNum).write.mode(SaveMode.Overwrite).format(fileFormat).partitionBy(partitions.split(","): _*).save(outputPath + "temp/" + loadtime)
-      logInfo("[" + appName + "] 转换用时 " + (new Date().getTime - begin) + " ms")
-
-      begin = new Date().getTime
-      var srcFileSuffix = "." + fileFormat
-      if(fileFormat=="json" || fileFormat=="csv") {
-        srcFileSuffix=""
-      }
-      val outFiles = fileSystem.globStatus(new Path(outputPath + "temp/" + loadtime + partitionTemplate + "/part*" + srcFileSuffix))
-      val filePartitions = new mutable.HashSet[String]
-      for (i <- 0 until outFiles.length) {
-        val nowPath = outFiles(i).getPath.toString
-        logInfo("nowPath:"+nowPath)
-        logInfo("outputPath" + outputPath)
-        filePartitions.+=(nowPath.substring(0, nowPath.lastIndexOf("/")).replace(outputPath + "temp/" + loadtime, "").substring(1))
-      }
-      logInfo(filePartitions.toString())
-
-      FileUtils.moveTempFilesToData(fileSystem, outputPath, loadtime, partitionTemplate, filePartitions, fileFormat)
-      logInfo("[" + appName + "] 存储用时 " + (new Date().getTime - begin) + " ms")
-
-
-      return "[" + appName + "]  ETL  success."
-    } catch {
-      case e: Exception => {
-        e.printStackTrace()
-        SparkHadoopUtil.get.globPath(new Path(outputPath + "temp/" + loadtime)).map(fileSystem.delete(_, true))
-        logError("[" + appName + "] 失败 处理异常" + e.getMessage)
-        return "[" + appName + "] 失败 处理异常"
-      }
-    }
-  }
-
 }
