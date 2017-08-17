@@ -1,35 +1,35 @@
 package com.zyuc.stat.iot.multiana
 
-import com.zyuc.stat.iot.etl.util.CommonETLUtils
 import com.zyuc.stat.properties.ConfigProperties
-import org.apache.hadoop.fs.FileSystem
-import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{SparkConf, SparkContext}
-/**
-  * Created by zhoucw on 17-7-25.
-  */
-object OperaAnalysis {
-  def main(args: Array[String]): Unit = {
+import org.apache.spark.sql.{DataFrame, SQLContext}
 
-    val sparkConf = new SparkConf()//.setAppName("OperalogAnalysis").setMaster("local[4]")
+/**
+  * Created by zhoucw on 17-8-14.
+  */
+object CardAnalysisbak {
+
+  def main(args: Array[String]): Unit = {
+    val sparkConf = new SparkConf().setAppName("OperalogAnalysis")//.setMaster("local[4]")
     val sc = new SparkContext(sparkConf)
     val sqlContext = new HiveContext(sc)
     sqlContext.sql("use " + ConfigProperties.IOT_HIVE_DATABASE)
     val operaDay = sc.getConf.get("spark.app.operaDay")
-    val operaTable = sc.getConf.get("spark.app.table.operaTable")
-    val appName =  sc.getConf.get("spark.app.name")
-    val outputPath = sc.getConf.get("spark.app.outputPath")
-    val operAnalysisTable = sc.getConf.get("spark.app.table.operAnalysisTable")
 
 
-    val operaPartitionD = operaDay.substring(2,8)
+  }
+
+
+
+  def getOperaDF(sqlContext:SQLContext, operaDay:String):DataFrame = {
+
     val cachedOperaTable = s"iot_opera_log_cached_$operaDay"
     sqlContext.sql(
       s"""CACHE TABLE ${cachedOperaTable} as
          |select l.mdn, l.logtype, l.opername, l.custprovince, l.vpdncompanycode
-         |from ${operaTable} l
-         |where l.opername in('open','close') and l.oper_result='成功' and length(mdn)>0 and  l.d = '${operaPartitionD}'
+         |from iot_opera_log l
+         |where l.opername in('open','close') and l.oper_result='成功' and length(mdn)>0 and  l.d = '${operaDay}'
        """.stripMargin)
 
     val openSql =
@@ -66,26 +66,20 @@ object OperaAnalysis {
 
     val allDF = openDF.unionAll(closeDF)
 
-    val operaTmpTable = "operaTable" + operaDay
-    allDF.registerTempTable(operaTmpTable)
+    val operaTable = "operaTable" + operaDay
+    allDF.registerTempTable(operaTable)
+
 
     val resultSql =
       s"""
          |select t.custprovince, t.vpdncompanycode, t.nettype,
          |sum(opennum) opensum,
          |sum(closenum) closesum
-         |from ${operaTmpTable} t
+         |from ${operaTable} t
          |group by t.custprovince, t.vpdncompanycode, t.nettype
        """.stripMargin
 
-    val resultDF = sqlContext.sql(resultSql).withColumn("d", lit(operaDay.substring(2,8)))
-
-    val fileSystem = FileSystem.newInstance(sc.hadoopConfiguration)
-    val coalesceNum = 1
-    val partitions="d"
-
-    CommonETLUtils.saveDFtoPartition(sqlContext, fileSystem, resultDF, coalesceNum, partitions, operaDay, outputPath, operAnalysisTable, appName)
-
+    val resultDF = sqlContext.sql(resultSql)
+    resultDF
   }
-
 }

@@ -86,8 +86,8 @@ object CDRETL extends Logging{
 
     val srcCDRDF = sqlContext.read.format("json").load(cdrLocation)
 
-    val authDF = CDRConverterUtils.parse(srcCDRDF, logType)
-    if (authDF == null) {
+    val cdrDF = CDRConverterUtils.parse(srcCDRDF, logType)
+    if (cdrDF == null) {
       logInfo(s"$cdrLocation , data file Exists, but no data in file")
       return s"$cdrLocation  , data file Exists, but no data in file"
     }
@@ -103,7 +103,7 @@ object CDRETL extends Logging{
     // 结果数据分区字段
     val partitions = "d,h,m5"
     // 将数据存入到HDFS， 并刷新分区表
-    val executeResult = CommonETLUtils.saveDFtoPartition(sqlContext, fileSystem, authDF, coalesceNum, partitions, loadTime, outputPath, logTableName, appName)
+    val executeResult = CommonETLUtils.saveDFtoPartition(sqlContext, fileSystem, cdrDF, coalesceNum, partitions, loadTime, outputPath, logTableName, appName)
 
     val srcDoneLocation = inputPath + "/" + loadTime + "_done"
     val isDoneRename = renameHDFSDir(fileSystem, srcDoingLocation, srcDoneLocation)

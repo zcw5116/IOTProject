@@ -40,7 +40,7 @@ object CDRConverterUtils extends Logging{
           "T800  as  acce_province","T801  as  acce_region","T802  as  sid","T803  as  nid","T804  as  siteid",
           "T805  as  sitename","T806  as  cellid","T807  as  cellname","T808  as  secid","T809  as  enterprise_name",
           "T9  as  nai", "substr(regexp_replace(T37,'-',''),3,6) as d", "substr(T37,12,2) as h",
-          "floor(substr(T37,15,2)/5)*5 as m5")
+          "lpad(floor(substr(T37,15,2)/5)*5,2,'0') as m5")
       }
       else if(authLogType==LOG_TYPE_PGW){
         newDF = df.selectExpr("IMSI  as  imsi", "MDN  as  mdn", "T0  as  recordtype", "T1  as  servedimsi",
@@ -65,7 +65,7 @@ object CDRConverterUtils extends Logging{
           "T801  as  t801", "T802  as  t802", "T804  as  t804", "T805  as  t805", "T806  as  t806",
           "T807  as  t807", "T809  as  t809", "T9  as  servingnodetype",
           "substr(regexp_replace(T46,'-',''),3,6) as d", "substr(T46,12,2) as h",
-          "floor(substr(T46,15,2)/5)*5 as m5")
+          "lpad(floor(substr(T46,15,2)/5)*5,2,'0') as m5")
 
         newDF = newDF.filter(newDF("l_timeoflastusage").isNotNull)
       }
