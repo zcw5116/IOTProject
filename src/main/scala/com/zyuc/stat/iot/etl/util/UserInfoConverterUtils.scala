@@ -1,7 +1,6 @@
 package com.zyuc.stat.iot.etl.util
 
-import com.zyuc.stat.iot.etl.util.TerminalConvertUtils.logError
-import com.zyuc.stat.utils.DateUtils
+
 import org.apache.spark.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
