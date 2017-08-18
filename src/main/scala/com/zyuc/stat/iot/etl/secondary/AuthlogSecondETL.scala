@@ -1,4 +1,4 @@
-package com.zyuc.stat.iot.etl
+package com.zyuc.stat.iot.etl.secondary
 
 import java.util.Date
 
@@ -7,8 +7,8 @@ import com.zyuc.stat.properties.ConfigProperties
 import com.zyuc.stat.utils.FileUtils.makeCoalesce
 import org.apache.hadoop.fs.FileSystem
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.{Logging, SparkConf, SparkContext}
 
 /**
   * Created by zhoucw on 17-8-1.
@@ -55,7 +55,7 @@ object AuthlogSecondETL extends Logging {
     val inputLocation = inputPath + "/dayid=" + partitionD + "/hourid=" + partitionH
     try {
 
-      import org.apache.spark.sql.functions._
+
       var begin = new Date().getTime
 
       import org.apache.spark.sql.functions._

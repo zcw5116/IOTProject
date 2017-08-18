@@ -59,6 +59,11 @@ object AuthMultiAnalysis extends Logging {
           val curH = DateUtils.timeCalcWithFormatConvertSafe(beginMinu, "yyyyMMddHH", i * 60 * 60, "HH")
           filterDF = filterDF.unionAll(sourceDF.filter("d=" + beginD).filter("h=" + curH))
         }
+
+        if (i == intervalHourNums) {
+          filterDF = filterDF.unionAll(sourceDF.filter("d=" + beginD).filter("h=" + endH).filter("authtime<" + endStr))
+        }
+
       }
     } else if (endD == beginD && beginH == endH) {
       filterDF = sourceDF.filter("d=" + beginD).filter("h=" + beginH).filter("authtime>=" + beginStr).filter("authtime<" + endStr)

@@ -110,6 +110,9 @@ object FileUtils extends Logging{
 
   }
 
+
+
+
   def moveNewlogFiles(outputPath:String, outFiles:Array[FileStatus], loadTime:String) :Unit = {
     var num = 1
     outFiles.foreach(filestatus=>{
@@ -120,7 +123,7 @@ object FileUtils extends Logging{
   }
 
   def downloadFileFromHdfs(fileSystem: FileSystem, hdfsDirLocation:String, localDirLocation:String, suffix:String) :Unit = {
-    val hdfsPath = new Path(hdfsDirLocation+"*")
+    val hdfsPath = new Path(hdfsDirLocation+"/*")
     val file = new File(localDirLocation)
     if(!file.exists()){
       file.mkdirs()
@@ -139,6 +142,39 @@ object FileUtils extends Logging{
     })
   }
 
+
+  def downFilesToLocal(fileSystem: FileSystem, hdfsDirLocation:String, localPath:String, loadTime:String, suffix:String):Unit = {
+
+    // 本地目录, 不存在就创建。 如果存在, 就删除目录下到所有文件
+    val localDirLocation = localPath + loadTime
+    val localFile = new File(localDirLocation)
+    if(!localFile.exists()){
+      localFile.mkdirs()
+    }
+    val fileList = localFile.listFiles()
+    fileList.foreach(f=>{
+      f.delete()
+    })
+
+    val hdfsPath = new Path(hdfsDirLocation+"/*")
+    val hdfsStatus = fileSystem.globStatus(hdfsPath)
+    var num = 0
+    hdfsStatus.foreach(p=>{
+      val hFile = p.getPath
+      val name = hFile.toString.substring(hFile.toString.lastIndexOf("/")+1)
+      val localPath = localDirLocation + "/" + loadTime + "_" + num + suffix
+      val len = fileSystem.getContentSummary(p.getPath).getLength
+      if(len>0){
+        val in = fileSystem.open(hFile)
+        val out= new FileOutputStream(localPath)
+        IOUtils.copyBytes(in,out, 4096,true)
+      }
+      num = num + 1
+    })
+
+
+  }
+
   def renameHDFSDir(fileSystem:FileSystem, srcLocation:String, destLocation:String) :Boolean = {
     val srcPath = new Path(srcLocation)
     val destPath = new Path(destLocation)
@@ -151,6 +187,14 @@ object FileUtils extends Logging{
     val config = new Configuration
     var fileSystem: FileSystem = null
     fileSystem = FileSystem.get(config)
+    val coalesceSize = 1
+
+    val hdfsDirLocation = "/tmp/mme"
+    val localDirLocation = "/home/slview/zcw/abc/"
+    val loadTime="20170813"
+    val suffix = ".json"
+
+    downFilesToLocal(fileSystem: FileSystem, hdfsDirLocation:String, localDirLocation:String, loadTime:String, suffix:String)
 /*
     try {
 
@@ -168,10 +212,7 @@ object FileUtils extends Logging{
         e.printStackTrace()
     }
 */
-    val parentDirLocation = "/tmp/zcw"
-    val srcLocation = "/tmp/zcw/t1"
-    val destLocation = "/tmp/zcw/t3"
-    renameHDFSDir(fileSystem, srcLocation, destLocation)
+
 
   }
 

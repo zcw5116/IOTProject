@@ -361,10 +361,10 @@ object MMELogETL extends Logging {
     var doneResult = "Success"
     if (!isDoneRename) {
       doneResult = "Failed"
-      logInfo(s"$srcDoingLocation rename to $srcDoneLocation :" + result)
+      logInfo(s"$srcDoingLocation rename to $srcDoneLocation :" + doneResult)
       System.exit(1)
     }
-    logInfo(s"$srcDoingLocation rename to $srcDoneLocation :" + result)
+    logInfo(s"$srcDoingLocation rename to $srcDoneLocation :" + doneResult)
    sc.stop()
   }
 

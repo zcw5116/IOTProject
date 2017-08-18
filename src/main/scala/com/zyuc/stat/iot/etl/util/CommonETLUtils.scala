@@ -5,8 +5,7 @@ import java.util.Date
 import com.zyuc.stat.utils.FileUtils
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.sql.hive.HiveContext
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.Logging
 import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 
 import scala.collection.mutable
@@ -43,6 +42,8 @@ object CommonETLUtils extends Logging {
         val nowPath = outFiles(i).getPath.toString
         filePartitions.+=(nowPath.substring(0, nowPath.lastIndexOf("/")).replace(outputPath + "temp/" + loadtime, "").substring(1))
       }
+
+
 
       FileUtils.moveTempFiles(fileSystem, outputPath, loadtime, partitionTemplate, filePartitions)
       logInfo("[" + appName + "] 存储用时 " + (new Date().getTime - begin) + " ms")

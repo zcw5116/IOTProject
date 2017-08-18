@@ -1,5 +1,7 @@
 package com.zyuc.stat.iot.user
 
+import com.zyuc.stat.iot.etl.secondary.CDRSecondETL.logError
+import com.zyuc.stat.iot.etl.util.CDRConverterUtils
 import com.zyuc.stat.properties.ConfigProperties
 import com.zyuc.stat.utils.DateUtils.timeCalcWithFormatConvertSafe
 import com.zyuc.stat.utils.{DateUtils, FileUtils, HbaseUtils}
@@ -13,6 +15,8 @@ import scala.collection.mutable
 
 /**
   * Created by zhoucw on 17-7-9.
+  * Desc: 1. 3G在线规则：取话单截断时间在统计时间点至前7个小时区间，状态为非结束状态，排除掉这个区间中话单中状态存在结束状态的account_session
+          2. 4G 在线规则： 取话单结束时间在统计时间点至后两个小时区间， 话单开始时间在统计时间点之前的用户
   */
 object UserOnlineBaseData extends Logging{
 
@@ -27,32 +31,40 @@ object UserOnlineBaseData extends Logging{
 
     val curHourtime = sc.getConf.get("spark.app.hourid") // 2017072412
     val outputPath = sc.getConf.get("spark.app.outputPath") // "/hadoop/IOT/ANALY_PLATFORM/UserOnline/"
-    var userTablePartitionID = DateUtils.timeCalcWithFormatConvertSafe(curHourtime.substring(0,8), "yyyyMMdd", -1*24*3600, "yyyyMMdd")
-    userTablePartitionID = sc.getConf.get("spark.app.userTablePartitionID", userTablePartitionID)
-    val userTable = sc.getConf.get("spark.app.userTable") //"iot_customer_userinfo"
-    val pdsnTable = sc.getConf.get("spark.app.pdsnTable")
-    val pgwTable = sc.getConf.get("spark.app.pgwTable")
+    val userTablePartitionID = sc.getConf.get("spark.app.userTablePartitionID")
+    val userTable = sc.getConf.get("spark.app.table.userTable") //"iot_customer_userinfo"
+    val pdsnTable = sc.getConf.get("spark.app.table.pdsnTable")
+    val pgwTable = sc.getConf.get("spark.app.table.pgwTable")
+    val basenumTable = sc.getConf.get("spark.app.table.basenumTable", "iot_useronline_base_nums")
+    val whetherUpdateBaseDataTime = sc.getConf.get("spark.app.whetherUpdateBaseDataTime", "Y")
 
+    if(whetherUpdateBaseDataTime != "Y" && whetherUpdateBaseDataTime != "N" ){
+      logError("日志类型logType错误, 期望值：Y, N ")
+      return
+    }
 
     val last7Hourtime = timeCalcWithFormatConvertSafe(curHourtime, "yyyyMMddHH", -7*60*60, "yyyyMMddHH")
+    val next2Hourtime = timeCalcWithFormatConvertSafe(curHourtime, "yyyyMMddHH", 2*60*60, "yyyyMMddHH")
     val dayidOfCurHourtime = curHourtime.substring(2, 8)
     val dayidOflast7Hourtime = last7Hourtime.substring(2, 8)
+    val dayidOfNext2Hourtime = next2Hourtime.substring(2, 8)
     val curHourid = curHourtime.substring(8, 10)
     val last7Hourid = last7Hourtime.substring(8, 10)
+    val next2Hourid = next2Hourtime.substring(8, 10)
     val curPartDayrid = dayidOfCurHourtime
 
     val userDF = sqlContext.table(userTable).filter("d=" + userTablePartitionID).
       selectExpr("mdn", "imsicdma", "custprovince", "case when length(vpdncompanycode)=0 then 'N999999999' else vpdncompanycode end  as vpdncompanycode")
-
+    userDF.show()
     // 缓存用户的表
     val cachedUserinfoTable = "iot_user_basic_info_cached"
     userDF.cache().registerTempTable(cachedUserinfoTable)
 
 
     val cachedCompanyTable = "cachedCompany"
-    sqlContext.sql(s"""CACHE TABLE ${cachedCompanyTable} as select distinct vpdncompanycode from ${cachedUserinfoTable}""")
+    sqlContext.sql(s"""CACHE TABLE ${cachedCompanyTable} as select distinct custprovince, vpdncompanycode from ${cachedUserinfoTable}""")
 
-
+    sqlContext.table(cachedCompanyTable).show()
     // 0点在线的用户
     var commonSql = ""
     if(dayidOfCurHourtime>dayidOflast7Hourtime){
@@ -115,15 +127,40 @@ object UserOnlineBaseData extends Logging{
 
     val timeOfFirstUsageStr = timeCalcWithFormatConvertSafe(curHourtime, "yyyyMMddHH",0, "yyyy-MM-dd HH:mm:ss")
     val pgwonlinecomptable = "pgwonlinecomp" + curHourtime
+
+    var pgwSql =
+      s"""
+         |select l_timeoffirstusage, mdn
+         |from ${pgwTable}
+         |where d='${dayidOfCurHourtime}' and h>=${curHourid}  and h<${next2Hourid}
+       """.stripMargin
+    if(dayidOfNext2Hourtime > dayidOfCurHourtime){
+      pgwSql =
+        s"""
+           |select l_timeoffirstusage, mdn
+           |from ${pgwTable}
+           |where d='${dayidOfCurHourtime}' and h>=${curHourid}
+           |union all
+           |select l_timeoffirstusage, mdn
+           |from ${pgwTable}
+           |where d='${dayidOfNext2Hourtime}' and h<${next2Hourid}
+       """.stripMargin
+    }
+
+    val pgwTempTable = "pgwTempTable_" + curHourtime
+    sqlContext.sql(pgwSql).registerTempTable(pgwTempTable)
+
+
     val pgwcompsql =
      s"""CACHE TABLE ${pgwonlinecomptable} as select o.vpdncompanycode, count(*) as pgwcnt
         |from ( SELECT u.mdn, u.vpdncompanycode
-        |       FROM ${cachedUserinfoTable} u LEFT SEMI JOIN ${pgwTable} t
-        |       ON  (u.mdn = t.mdn and t.d='${dayidOfCurHourtime}' and t.l_timeoffirstusage < '${timeOfFirstUsageStr}' and t.h>=${curHourid})
+        |       FROM ${cachedUserinfoTable} u LEFT SEMI JOIN ${pgwTempTable} t
+        |       ON  (u.mdn = t.mdn and t.l_timeoffirstusage < '${timeOfFirstUsageStr}')
         |     ) o
         |group by o.vpdncompanycode
       """.stripMargin
     sqlContext.sql(pgwcompsql).coalesce(1)
+    sqlContext.sql(pgwcompsql).show()
 
 /*    val companyonlinesum =
       s"""select '${curHourtime}' as hourtime,c.vpdncompanycode, nvl(t1.g3cnt,0) as g3cnt, nvl(t2.pgwcnt,0) as pgwcnt
@@ -134,7 +171,7 @@ object UserOnlineBaseData extends Logging{
 
     // 暂时将g3置为0
     val companyonlinesum =
-      s"""select '${curPartDayrid}' as d, '${curHourid}' as h,c.vpdncompanycode, 0 as g3cnt, nvl(t2.pgwcnt,0) as pgwcnt
+      s"""select '${curPartDayrid}' as d, '${curHourid}' as h, c.custprovince, c.vpdncompanycode, 0 as g3cnt, nvl(t2.pgwcnt,0) as pgwcnt
          |from ${cachedCompanyTable} c
          |left join ${g3onlinecomptable} t1 on(c.vpdncompanycode=t1.vpdncompanycode)
          |left join ${pgwonlinecomptable} t2 on(c.vpdncompanycode=t2.vpdncompanycode)
@@ -160,7 +197,8 @@ object UserOnlineBaseData extends Logging{
       template // rename original dir
     }
 
-
+    logInfo("companyonlinesum:" + companyonlinesum)
+    sqlContext.sql(companyonlinesum).show()
     sqlContext.sql(companyonlinesum).repartition(1).write.mode(SaveMode.Overwrite).format("orc").partitionBy(partitions.split(","): _*).save(outputPath + s"temp/${curHourtime}")
     val outFiles = fileSystem.globStatus(new Path(outputPath + "temp/" + curHourtime + getTemplate + "/*.orc"))
     val filePartitions = new mutable.HashSet[String]
@@ -174,13 +212,15 @@ object UserOnlineBaseData extends Logging{
 
     //sqlContext.read.format("orc").load("/hadoop/IOT/ANALY_PLATFORM/UserOnline/20170709").registerTempTable("tttt")
     //sqlContext.sql("select vpdncompanycode, g3cnt, pgwcnt from tttt where vpdncompanycode='C000000517'").collect().foreach(println)
-    val sql = s"alter table iot_useronline_base_nums add IF NOT EXISTS partition(d='$curPartDayrid', h='$curHourid')"
+    val sql = s"alter table ${basenumTable} add IF NOT EXISTS partition(d='$curPartDayrid', h='$curHourid')"
     logInfo("sql:" + sql)
     sqlContext.sql(sql)
 
     // 写入hbase表
-    HbaseUtils.updateCloumnValueByRowkey("iot_dynamic_info","rowkey001","onlinebase","baseHourid", curHourtime) // 从habase里面获取
-
+    if(whetherUpdateBaseDataTime == "Y"){
+      logInfo("write whetherUpdateBaseDataTime to Hbase Table. ")
+      HbaseUtils.updateCloumnValueByRowkey("iot_dynamic_info","rowkey001","onlinebase","baseHourid", curHourtime) // 从habase里面获取
+    }
 
     sc.stop()
 

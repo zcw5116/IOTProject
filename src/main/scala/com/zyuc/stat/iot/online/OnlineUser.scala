@@ -57,8 +57,6 @@ object OnlineUser extends Logging {
 
 
 
-
-
   }
 
   case class UserOnlineDetail(companycode: String, time: String, company_time: String, g3Start: String, g3Stop: String,
