@@ -2,12 +2,11 @@ package com.zyuc.stat.iot.etl.secondary
 
 import java.util.Date
 
-import com.zyuc.stat.iot.etl.secondary.AuthlogSecondETL.{logError, logInfo}
 import com.zyuc.stat.iot.etl.util.{CDRConverterUtils, CommonETLUtils}
 import com.zyuc.stat.properties.ConfigProperties
-import com.zyuc.stat.utils.FileUtils.{makeCoalesce, renameHDFSDir}
-import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import com.zyuc.stat.utils.FileUtils.makeCoalesce
+import org.apache.hadoop.fs.FileSystem
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.apache.spark.sql.functions._
@@ -70,7 +69,8 @@ object CDRSecondETL extends Logging {
       // disable type inference
       sqlContext.setConf("spark.sql.sources.partitionColumnTypeInference.enabled", "false")
       // cdr第一次清洗保存到位置
-      val cdrDF = sqlContext.read.format("orc").load(inputPath).filter("d=" + partitionD).filter("h=" + partitionH)
+      val cdrDF = sqlContext.read.format("orc").load(inputLocation)
+        //.filter("d=" + partitionD).filter("h=" + partitionH)
 
 
       val userDF = sqlContext.table(userTable).filter("d=" + userTablePatitionDayid).
@@ -87,7 +87,8 @@ object CDRSecondETL extends Logging {
             cdrDF.col("originating"), cdrDF.col("termination"), cdrDF.col("event_time"), cdrDF.col("active_time"),
             cdrDF.col("acct_input_packets"), cdrDF.col("acct_output_packets"),cdrDF.col("acct_session_time"),
             userDF.col("vpdncompanycode"), userDF.col("custprovince"),
-            cdrDF.col("cellid"),cdrDF.col("bsid"),cdrDF.col("d"),cdrDF.col("h"))
+            cdrDF.col("cellid"),cdrDF.col("bsid")).
+           withColumn("d", lit(partitionD)).withColumn("h", lit(partitionH))
 
         } else if (cdrLogType == CDRConverterUtils.LOG_TYPE_PGW) {
 
@@ -95,8 +96,8 @@ object CDRSecondETL extends Logging {
             select(cdrDF.col("mdn"), cdrDF.col("recordtype"), cdrDF.col("starttime"),
               cdrDF.col("stoptime"), cdrDF.col("l_timeoffirstusage"), cdrDF.col("l_timeoflastusage"),
               cdrDF.col("l_datavolumefbcuplink").alias("upflow"), cdrDF.col("l_datavolumefbcdownlink").alias("downflow"),
-              userDF.col("vpdncompanycode"), userDF.col("custprovince"),
-              cdrDF.col("d"),cdrDF.col("h"))
+              userDF.col("vpdncompanycode"), userDF.col("custprovince")).
+             withColumn("d", lit(partitionD)).withColumn("h", lit(partitionH))
 
 
         } else if (cdrLogType == CDRConverterUtils.LOG_TYPE_HACCG) {
@@ -106,6 +107,7 @@ object CDRSecondETL extends Logging {
               cdrDF.col("originating"), cdrDF.col("termination"), cdrDF.col("event_time"), cdrDF.col("active_time"),
               cdrDF.col("acct_input_packets"), cdrDF.col("acct_output_packets"),cdrDF.col("acct_session_time"),
               cdrDF.col("cellid"),cdrDF.col("bsid"),cdrDF.col("d"),cdrDF.col("h"))*/
+
         }
         resultDF
       }
