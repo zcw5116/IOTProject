@@ -22,8 +22,9 @@ object CDRSecondETLDay extends Logging{
 
     val appName = sc.getConf.get("spark.app.name") // name_20170731
     val inputPath = sc.getConf.get("spark.app.cdr.inputPath") // hdfs://EPC-IOT-ES-06:8020/hadoop/IOT/data/cdr/secondaryoutput/pdsn/data  小时文件存放路径
-    val outputPath = sc.getConf.get("spark.app.outputPath") //"hdfs://EPC-LOG-NM-15:8020/hadoop/IOT/data/cdr/daysummery/pdsn/"            汇总后文件存放路径
-    val cdrSecondaryETLTable = sc.getConf.get("spark.app.summerytype.table") // "pdsn"
+    val outputPath = sc.getConf.get("spark.app.outputPath") //"hdfs://EPC-IOT-ES-06:8020/hadoop/IOT/data/cdr/daysummery/pdsn/"            汇总后文件存放路径
+    val cdrSecondaryETLTable = sc.getConf.get("spark.app.summerytype.table") // "iot_cdr_data_pdsn_d"
+    val logType = sc.getConf.get("spark.app.cdr.logtype") // pdsn pgw haccg
     val coalesceSize = sc.getConf.get("spark.app.coalesce.size").toInt //128
 
 
@@ -39,16 +40,16 @@ object CDRSecondETLDay extends Logging{
       sqlContext.setConf("spark.sql.sources.partitionColumnTypeInference.enabled", "false")
       val cdrDF = sqlContext.read.format("orc").load(inputLocation)
       var resultDF: DataFrame = null
-      if(cdrSecondaryETLTable == "pdsn"){
+      if(logType == "pdsn"){
          resultDF = cdrDF.select(cdrDF.col("mdn"),cdrDF.col("account_session_id"),cdrDF.col("acct_status_type"),cdrDF.col("originating")
           ,cdrDF.col("termination"),cdrDF.col("event_time"),cdrDF.col("acct_input_packets"),cdrDF.col("acct_output_packets"),cdrDF.col("acct_session_time")
           ,cdrDF.col("vpdncompanycode"),cdrDF.col("custprovince"),cdrDF.col("cellid"),cdrDF.col("bsid")).withColumn("d", lit(partitionD))
 
-      }else if(cdrSecondaryETLTable == "pgw"){
+      }else if(logType == "pgw"){
          resultDF = cdrDF.select(cdrDF.col("mdn"),cdrDF.col("recordtype"),cdrDF.col("starttime"),cdrDF.col("stoptime")
           ,cdrDF.col("l_timeoffirstusage"),cdrDF.col("l_timeoflastusage"),cdrDF.col("upflow"),cdrDF.col("downflow"),cdrDF.col("vpdncompanycode")
           ,cdrDF.col("custprovince")).withColumn("d", lit(partitionD))
-      }else if(cdrSecondaryETLTable == "haccg"){
+      }else if(logType == "haccg"){
 
 
       }
