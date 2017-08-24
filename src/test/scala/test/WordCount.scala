@@ -11,15 +11,12 @@ import org.apache.spark.streaming.{Seconds, StreamingContext}
 object WordCount {
   def main (args: Array[String]): Unit = {
 
-    val calPeriodHourNum  = "2"
-    var hourid="00"
-    for(i <- 0 until 24/calPeriodHourNum.toInt){
-      hourid = DateUtils.timeCalcWithFormatConvertSafe(hourid, "HH", (calPeriodHourNum.toInt)*3600, "HH")
+    val  a = "12345"
+    println(a.substring(2,3))
 
-      println(hourid)
 
     }
 
-  }
+
 
 }

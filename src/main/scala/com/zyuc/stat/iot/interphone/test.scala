@@ -75,7 +75,9 @@ object test {
     pgwDF.filter("length(terminatecause)>0").groupBy(pgwDF.col("hourid"),pgwDF.col("terminatecause")).agg(count(lit(1)).alias("tercase")).orderBy(pgwDF.col("hourid"))
     pgwDF.filter("terminatecause like '%code%'").select("hourid","mdn","terminatecause").show
 
-
+    val a = sqlContext.table("pgwradius_out").filter("dayid='20170822'").filter("status='Start'").select("mdn","time")
+    a.repartition(2).write.mode(SaveMode.Overwrite).save("/tmp/tmp")
+    a.groupBy("mdn").count()
     // 流量
     // g3
 /*    val g3DF1 = sqlContext.table("iot_cdr_3gaaa_ticket").filter("dayid=20170727").filter("hourid>'21'").select("event_time","mdn","originating","termination","dayid","hourid")
