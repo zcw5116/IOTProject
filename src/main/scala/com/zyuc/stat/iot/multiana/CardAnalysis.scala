@@ -64,17 +64,21 @@ object CardAnalysis {
     var resultDF = companyDF.join(operDF, companyDF.col("vpdncompanycode")===operDF.col("vpdncompanycode") &&
       companyDF.col("nettype")===operDF.col("nettype"), "left").select(companyDF.col("custprovince"),
       companyDF.col("vpdncompanycode"), companyDF.col("companyName"), companyDF.col("nettype"),
-      operDF.col("opensum"),  operDF.col("closesum"))
+      operDF.col("opennum"),  operDF.col("closenum"))
 
 
     // online
-    val onlineDF = sqlContext.table(onlineTable).filter("d="+partitionD).selectExpr("vpdncompanycode",
+    val onlineHourDF = sqlContext.table(onlineTable).filter("d="+partitionD).selectExpr("vpdncompanycode",
     "case when nettype='3G' then '2/3G' else nettype end as nettype", "onlinenum")
+    val onlineDF = onlineHourDF.groupBy(onlineHourDF.col("vpdncompanycode"), onlineHourDF.col("nettype")).
+    agg(floor(avg(onlineHourDF.col("onlinenum"))).alias("onlinenum"))
+
+
 
     resultDF =  resultDF.join(onlineDF, resultDF.col("vpdncompanycode")===onlineDF.col("vpdncompanycode") &&
       resultDF.col("nettype")===onlineDF.col("nettype"), "left").select(resultDF.col("custprovince"),
-      resultDF.col("vpdncompanycode"), resultDF.col("companyName"), resultDF.col("nettype"), resultDF.col("opensum"),
-      resultDF.col("closesum"),onlineDF.col("onlinenum"))
+      resultDF.col("vpdncompanycode"), resultDF.col("companyName"), resultDF.col("nettype"), resultDF.col("opennum"),
+      resultDF.col("closenum"),onlineDF.col("onlinenum"))
 
     // active
     val activedUserDF = sqlContext.table(activedUserTable).filter("d="+partitionD).selectExpr("vpdncompanycode",
@@ -85,11 +89,11 @@ object CardAnalysis {
       select(
       resultDF.col("custprovince"), resultDF.col("vpdncompanycode"),  resultDF.col("companyName"),
         resultDF.col("nettype"),
-        when(resultDF.col("opensum").isNull, 0).otherwise(resultDF.col("opensum")).alias("opensum"),
-        when(resultDF.col("closesum").isNull, 0).otherwise(resultDF.col("closesum")).alias("closesum"),
+        when(resultDF.col("opennum").isNull, 0).otherwise(resultDF.col("opennum")).alias("opennum"),
+        when(resultDF.col("closenum").isNull, 0).otherwise(resultDF.col("closenum")).alias("closenum"),
         when(resultDF.col("onlinenum").isNull,0).otherwise(resultDF.col("onlinenum")).alias("onlinenum"),
         when(activedUserDF.col("activednum").isNull,0).otherwise(activedUserDF.col("activednum")).alias("activednum")).
-      withColumn("dayid", lit(dayid))
+      withColumn("datetime", lit(dayid))
 
 
     val coalesceNum = 1

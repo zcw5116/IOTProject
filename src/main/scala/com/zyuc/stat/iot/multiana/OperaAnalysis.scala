@@ -72,8 +72,8 @@ object OperaAnalysis {
     val resultSql =
       s"""
          |select t.custprovince, t.vpdncompanycode, t.nettype,
-         |sum(opennum) opensum,
-         |sum(closenum) closesum
+         |sum(opennum) opennum,
+         |sum(closenum) closenum
          |from ${operaTmpTable} t
          |group by t.custprovince, t.vpdncompanycode, t.nettype
        """.stripMargin

@@ -23,6 +23,7 @@ object IotTerminalAnaly extends Logging{
     val terminalOutputPath = sc.getConf.get("spark.app.terminalOutputPath")  // /hadoop/IOT/data/terminal/output/
     val localOutputPath = sc.getConf.get("spark.app.localOutputPath")  // /slview/test/zcw/shell/terminal/json/
     val terminalResultTable = sc.getConf.get("spark.app.terminalResultTable")
+    val companyInfoTable = sc.getConf.get("spark.app.table.companyInfo") //"iot_activeduser_data_day"
     val appName = sc.getConf.get("spark.app.name") // terminalmultiAnalysis_2017073111
     val coalesceNum = sc.getConf.get("spark.app.coalesceNum", "1")
 
@@ -33,19 +34,26 @@ object IotTerminalAnaly extends Logging{
 
 
     val userDF = sqlContext.table(userTable).filter("d=" + userTablePartitionDayid).
-      selectExpr("mdn", "imei", "case when length(custprovince)=0 then '其他' else custprovince end  as custprovince", "case when length(vpdncompanycode)=0 then 'N999999999' else vpdncompanycode end  as vpdncompanycode").
+      selectExpr("mdn", "imei", "case when length(custprovince)=0 or custprovince is null then '其他' else custprovince end  as custprovince", "case when length(vpdncompanycode)=0 then 'N999999999' else vpdncompanycode end  as vpdncompanycode").
       cache()
 
-    val aggDF = userDF.join(terminalDF, userDF.col("imei").substr(0,8)===terminalDF.col("tac"), "left").
+    val aggTmpDF = userDF.join(terminalDF, userDF.col("imei").substr(0,8)===terminalDF.col("tac"), "left").
       groupBy(userDF.col("custprovince"), userDF.col("vpdncompanycode"), terminalDF.col("devicetype"),
-        terminalDF.col("modelname")).agg(count(lit(1)).alias("ter_cnt"))
+        terminalDF.col("modelname")).agg(count(lit(1)).alias("tercnt"))
+
+    val companyDF = sqlContext.table(companyInfoTable).select("companyCode", "companyName")
+
+    val  aggDF = aggTmpDF.join(companyDF, aggTmpDF.col("vpdncompanycode")===companyDF.col("companyCode"))
+
+
     // 处理空值
-    val resultDF = aggDF.select(lit(userTablePartitionDayid).alias("dayid"),
-      when(aggDF.col("custprovince").isNull, "").otherwise(aggDF.col("custprovince")).alias("custprovince"),
-      when(aggDF.col("vpdncompanycode").isNull, "").otherwise(aggDF.col("vpdncompanycode")).alias("vpdncompanycode"),
+    val resultDF = aggDF.select(lit(userTablePartitionDayid).alias("datetime"),
+      when(aggDF.col("custprovince").isNull, "其他").otherwise(aggDF.col("custprovince")).alias("custprovince"),
+      when(aggDF.col("vpdncompanycode").isNull, "N999999999").otherwise(aggDF.col("vpdncompanycode")).alias("vpdncompanycode"),
+      when(aggDF.col("companyName").isNull, "其他").otherwise(aggDF.col("companyName")).alias("companyName"),
       when(aggDF.col("devicetype").isNull, "").otherwise(aggDF.col("devicetype")).alias("devicetype"),
       when(aggDF.col("modelname").isNull, "").otherwise(aggDF.col("modelname")).alias("modelname"),
-      aggDF.col("ter_cnt"))
+      aggDF.col("tercnt"))
 
 
     val terminalOutputLocatoin = terminalOutputPath + "json/data/" + userTablePartitionDayid

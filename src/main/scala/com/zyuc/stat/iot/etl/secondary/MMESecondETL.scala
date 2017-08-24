@@ -33,7 +33,7 @@ object MMESecondETL extends Logging {
     val terminalTable = sc.getConf.get("spark.app.terminal.table") // "iot_dim_terminal"
     val userTable = sc.getConf.get("spark.app.user.table") //"iot_customer_userinfo"
     val mmeLogTable = sc.getConf.get("spark.app.firstETL.mmelog.table") // "iot_mme_log"
-    val mmeLogDayHourTable = sc.getConf.get("spark.app.secondETL.mmelog.table")  // "iot_mme_log_day_hour"
+    val mmeLogDayHourTable = sc.getConf.get("spark.app.secondETL.mmelog.table")  // "iot_mme_log_hour"
     val coalesceSize = sc.getConf.get("spark.app.coalesce.size").toInt //128
 
     val hourid = appName.substring(appName.lastIndexOf("_") + 1)  //"2017073111"

@@ -84,7 +84,7 @@ object CDRSecondETL extends Logging {
         if (cdrLogType == CDRConverterUtils.LOG_TYPE_PDSN) {
          resultDF = cdrDF.join(userDF, userDF.col("mdn") === cdrDF.col("mdn"), "left").
           select(cdrDF.col("mdn"), cdrDF.col("account_session_id"), cdrDF.col("acct_status_type"),
-            cdrDF.col("originating"), cdrDF.col("termination"), cdrDF.col("event_time"), cdrDF.col("active_time"),
+            cdrDF.col("originating").alias("upflow"), cdrDF.col("termination").alias("downflow"), cdrDF.col("event_time"), cdrDF.col("active_time"),
             cdrDF.col("acct_input_packets"), cdrDF.col("acct_output_packets"),cdrDF.col("acct_session_time"),
             userDF.col("vpdncompanycode"), userDF.col("custprovince"),
             cdrDF.col("cellid"),cdrDF.col("bsid"),cdrDF.col("d"),cdrDF.col("h"))
