@@ -42,7 +42,7 @@ object CDRSecondETLDay extends Logging{
       var resultDF: DataFrame = null
       if(logType == "pdsn"){
          resultDF = cdrDF.select(cdrDF.col("mdn"),cdrDF.col("account_session_id"),cdrDF.col("acct_status_type"),cdrDF.col("originating")
-          ,cdrDF.col("termination"),cdrDF.col("event_time"),cdrDF.col("acct_input_packets"),cdrDF.col("acct_output_packets"),cdrDF.col("acct_session_time")
+          ,cdrDF.col("termination").alias("upflow"),cdrDF.col("event_time").alias("downflow"),cdrDF.col("acct_input_packets"),cdrDF.col("acct_output_packets"),cdrDF.col("acct_session_time")
           ,cdrDF.col("vpdncompanycode"),cdrDF.col("custprovince"),cdrDF.col("cellid"),cdrDF.col("bsid")).withColumn("d", lit(partitionD))
 
       }else if(logType == "pgw"){
