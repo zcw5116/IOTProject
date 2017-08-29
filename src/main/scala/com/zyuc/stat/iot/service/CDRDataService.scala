@@ -10,7 +10,7 @@ import org.apache.hadoop.hbase.mapred.TableOutputFormat
 import org.apache.hadoop.hbase.mapreduce.TableInputFormat
 import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.mapred.JobConf
-import org.apache.spark.SparkContext
+import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.hive.HiveContext
@@ -23,7 +23,7 @@ case class HbaseCdrLog(companycode:String, time:String, company_time:String,
                        p_pdsn_upflow:String,p_pdsn_downflow:String,p_pgw_upflow:String,p_pgw_downflow:String,
                        b_pdsn_upflow:String,b_pdsn_downflow:String,b_pgw_upflow:String,b_pgw_downflow:String)
 
-object CDRDataService {
+object CDRDataService extends Logging{
   def registerCdrRDD(sc:SparkContext, yyyyMMddHHmm:String):RDD[HbaseCdrLog] = {
     val dayid = yyyyMMddHHmm.substring(0,8)
     val htable = "iot_cdr_flow_stat_" + dayid
@@ -112,6 +112,8 @@ object CDRDataService {
 
   def SaveRddToAlarm(sc:SparkContext, sqlContext:SQLContext, df:DataFrame, yyyyMMddHHmm:String) = {
     val startM5 = yyyyMMddHHmm.substring(8, 12)
+    val dayid = yyyyMMddHHmm.substring(0, 8)
+
     val alarmHtable = "analyze_rst_tab"
     val hDFtable = "htable"
     df.registerTempTable(hDFtable)
@@ -125,6 +127,18 @@ object CDRDataService {
     val alarmJobConf = new JobConf(conf, this.getClass)
     alarmJobConf.setOutputFormat(classOf[TableOutputFormat])
     alarmJobConf.set(TableOutputFormat.OUTPUT_TABLE, alarmHtable)
+
+    // 统计当前时刻的累计流量， 存入预警表和流量的hbase表
+    // 流量的hbase表
+    val hbaseCdrTable = "iot_cdr_flow_stat_" + dayid
+    val families = new Array[String](1)
+    families(0) = "flowinfo"
+    HbaseUtils.createIfNotExists(hbaseCdrTable,families)
+
+    val cdrJobConf = new JobConf(conf, this.getClass)
+    cdrJobConf.setOutputFormat(classOf[TableOutputFormat])
+    cdrJobConf.set(TableOutputFormat.OUTPUT_TABLE, hbaseCdrTable)
+
 
     val alarmdf = sqlContext.sql(alarmSql).coalesce(1)
 
@@ -141,6 +155,7 @@ object CDRDataService {
        * Put.add方法接收三个参数：列族，列名，数据
        */
       val currentPut = new Put(Bytes.toBytes(arr._1))
+      val cdrPut = new Put(Bytes.toBytes(arr._1 + "-" + startM5.toString))
 
       currentPut.addColumn(Bytes.toBytes("alarmChk"), Bytes.toBytes("flow_c_pdsn_time"), Bytes.toBytes(startM5.toString))
       currentPut.addColumn(Bytes.toBytes("alarmChk"), Bytes.toBytes("flow_c_pdsn_up"), Bytes.toBytes(arr._2))
@@ -159,12 +174,61 @@ object CDRDataService {
       currentPut.addColumn(Bytes.toBytes("alarmChk"), Bytes.toBytes("flow_b_pgw_up"), Bytes.toBytes(arr._12))
       currentPut.addColumn(Bytes.toBytes("alarmChk"), Bytes.toBytes("flow_b_pgw_down"), Bytes.toBytes(arr._13))
 
+      // 当前时刻汇总流量入告警表
+      currentPut.addColumn(Bytes.toBytes("alarmChk"), Bytes.toBytes("flow_c_in_sum"), Bytes.toBytes((arr._3.toDouble + arr._9.toDouble).toString ))
+      currentPut.addColumn(Bytes.toBytes("alarmChk"), Bytes.toBytes("flow_c_out_sum"), Bytes.toBytes((arr._2.toDouble + arr._8.toDouble).toString ))
+      currentPut.addColumn(Bytes.toBytes("alarmChk"), Bytes.toBytes("flow_c_time"), Bytes.toBytes(yyyyMMddHHmm))
+      // 当前时刻汇总流量入话单表
+      cdrPut.addColumn(Bytes.toBytes("flowinfo"), Bytes.toBytes("flow_c_in_sum"), Bytes.toBytes((arr._3.toDouble + arr._9.toDouble).toString ))
+      cdrPut.addColumn(Bytes.toBytes("flowinfo"), Bytes.toBytes("flow_c_out_sum"), Bytes.toBytes((arr._2.toDouble + arr._8.toDouble).toString ))
 
       //转化成RDD[(ImmutableBytesWritable,Put)]类型才能调用saveAsHadoopDataset
-      (new ImmutableBytesWritable, currentPut)
+      ((new ImmutableBytesWritable, currentPut), (new ImmutableBytesWritable, cdrPut))
     }
     }
 
-    alarmhbaserdd.saveAsHadoopDataset(alarmJobConf)
+    alarmhbaserdd.map(_._1).saveAsHadoopDataset(alarmJobConf)
+    alarmhbaserdd.map(_._2).saveAsHadoopDataset(cdrJobConf)
+
+
+
+
+
+    val aggSql = "select companycode, " +
+      " sum(nvl(c_pdsn_upflow,0)) as c_pdsn_upflow, sum(nvl(c_pdsn_downflow,0)) as c_pdsn_downflow, " +
+      " sum(nvl(c_pgw_upflow,0)) as c_pgw_upflow, sum(nvl(c_pgw_downflow,0)) as c_pgw_downflow " +
+      " from " + hDFtable + "  where time<='" + startM5  + "' group by companycode"
+
+
+    logInfo("aggSql: " + aggSql)
+    val aggDF = sqlContext.sql(aggSql).coalesce(1)
+
+    // type, vpdncompanycode, authcnt, successcnt, failedcnt, authmdnct, authfaieldcnt
+    val aggrdd = aggDF.rdd.map(x => (x.getString(0),
+      x.getDouble(1),x.getDouble(2), x.getDouble(3) , x.getDouble(4)))
+
+    val aggHbaseRdd = aggrdd.map { arr => {
+      /*一个Put对象就是一行记录，在构造方法中指定主键
+       * 所有插入的数据必须用org.apache.hadoop.hbase.util.Bytes.toBytes方法转换
+       * Put.add方法接收三个参数：列族，列名，数据
+       */
+      val aggPut = new Put(Bytes.toBytes(arr._1))
+      val cdrPut = new Put(Bytes.toBytes(arr._1 + "-" + startM5.toString))
+
+      // 截止当前时刻日汇总流量入告警表
+      aggPut.addColumn(Bytes.toBytes("alarmChk"), Bytes.toBytes("flow_d_in_sum"), Bytes.toBytes((arr._3 + arr._5).toString))
+      aggPut.addColumn(Bytes.toBytes("alarmChk"), Bytes.toBytes("flow_d_out_sum"), Bytes.toBytes((arr._2 + arr._4).toString))
+      // 截止当前时刻日汇总流量入话单表
+      cdrPut.addColumn(Bytes.toBytes("flowinfo"), Bytes.toBytes("flow_d_in_sum"), Bytes.toBytes((arr._3 + arr._5).toString))
+      cdrPut.addColumn(Bytes.toBytes("flowinfo"), Bytes.toBytes("flow_d_out_sum"), Bytes.toBytes((arr._2 + arr._4).toString))
+
+      //转化成RDD[(ImmutableBytesWritable,Put)]类型才能调用saveAsHadoopDataset
+      ((new ImmutableBytesWritable, aggPut),(new ImmutableBytesWritable, cdrPut))
+    }
+    }
+
+    aggHbaseRdd.map(_._1).saveAsHadoopDataset(alarmJobConf)
+    aggHbaseRdd.map(_._2).saveAsHadoopDataset(cdrJobConf)
+
   }
 }

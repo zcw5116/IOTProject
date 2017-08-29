@@ -30,10 +30,11 @@ object MMESecondETL extends Logging {
     val appName = sc.getConf.get("spark.app.name")  // name_2017073111
     val inputPath = sc.getConf.get("spark.app.mme.inputPath") //" hdfs://EPC-LOG-NM-15:8020/hadoop/IOT/ANALY_PLATFORM/MME/data/"
     val outputPath = sc.getConf.get("spark.app.outputPath")  //"hdfs://EPC-LOG-NM-15:8020/hadoop/IOT/ANALY_PLATFORM/MME/secondETLData/"
-    val terminalTable = sc.getConf.get("spark.app.terminal.table") // "iot_dim_terminal"
-    val userTable = sc.getConf.get("spark.app.user.table") //"iot_customer_userinfo"
-    val mmeLogTable = sc.getConf.get("spark.app.firstETL.mmelog.table") // "iot_mme_log"
-    val mmeLogDayHourTable = sc.getConf.get("spark.app.secondETL.mmelog.table")  // "iot_mme_log_hour"
+    val terminalTable = sc.getConf.get("spark.app.table.terminal") // "iot_dim_terminal"
+    val userTable = sc.getConf.get("spark.app.table.user") //"iot_customer_userinfo"
+    val userTablePartitionID = sc.getConf.get("spark.app.table.userTablePartitionID")
+    val mmeLogTable = sc.getConf.get("spark.app.table.firstETL.mmelog") // "iot_mme_log"
+    val mmeLogDayHourTable = sc.getConf.get("spark.app.table.secondETL.mmelog")  // "iot_mme_log_hour"
     val coalesceSize = sc.getConf.get("spark.app.coalesce.size").toInt //128
 
     val hourid = appName.substring(appName.lastIndexOf("_") + 1)  //"2017073111"
@@ -44,7 +45,7 @@ object MMESecondETL extends Logging {
 
     val partitionD = hourid.substring(2, 8)
     val partitionH = hourid.substring(8, 10)
-    val preDayid = DateUtils.timeCalcWithFormatConvertSafe("hourid", "yyyymmddHH", -1*24*60*60, "yyyymmdd")
+    val preDayid = DateUtils.timeCalcWithFormatConvertSafe(hourid, "yyyymmddHH", -1*24*60*60, "yyyymmdd")
     // mme第一次清洗保存到位置
     val inputLocation = inputPath + "/d=" + partitionD + "/h=" + partitionH
     try {
@@ -56,7 +57,7 @@ object MMESecondETL extends Logging {
       // 终端信息表
       val terminalDF = sqlContext.table(terminalTable).select("tac", "modelname", "devicetype").cache() //sqlContext.read.format("orc").load("/hadoop/IOT/ANALY_PLATFORM/BasicData/IOTTerminal/data")
 
-      val userDF = sqlContext.table(userTable).filter("d=" + preDayid).
+      val userDF = sqlContext.table(userTable).filter("d=" + userTablePartitionID).
         selectExpr("mdn", "custprovince", "case when length(vpdncompanycode)=0 then 'N999999999' else vpdncompanycode end  as vpdncompanycode").
         cache()
 
@@ -127,7 +128,6 @@ object MMESecondETL extends Logging {
     } finally {
       sc.stop()
     }
-
   }
 
 }

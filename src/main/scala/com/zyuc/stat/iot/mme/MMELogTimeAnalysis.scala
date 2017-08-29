@@ -11,6 +11,7 @@ import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.mapred.JobConf
 import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.apache.spark.sql.hive.HiveContext
+import com.zyuc.stat.utils.MathUtil.divOpera
 
 /**
   * Created by zhoucw on 17-7-24.
@@ -85,9 +86,16 @@ object MMELogTimeAnalysis extends Logging{
     authJobConf.set(TableOutputFormat.OUTPUT_TABLE, htable)
 
 
+    // 预警表
+    val alarmChkTable = "analyze_rst_tab"
+    val alarmChkJobConf = new JobConf(conf, this.getClass)
+    alarmChkJobConf.setOutputFormat(classOf[TableOutputFormat])
+    alarmChkJobConf.set(TableOutputFormat.OUTPUT_TABLE, alarmChkTable)
+
+
     // type, vpdncompanycode, authcnt, successcnt, failedcnt, authmdnct, authfaieldcnt
     val hbaserdd = mmeGroupDF.rdd.map(x => (x.getString(0), x.getLong(1), x.getLong(2), x.getLong(3),
-      x.getLong(4)))
+      x.getLong(4), divOpera(x.getLong(1).toString,x.getLong(2).toString) ))
 
     // 当前窗口的mme日志
     val mmecurrentrdd = hbaserdd.map { arr => {
@@ -96,15 +104,21 @@ object MMELogTimeAnalysis extends Logging{
        * Put.add方法接收三个参数：列族，列名，数据
        */
       val currentPut = new Put(Bytes.toBytes(arr._1 + "-" + curHourM5.toString))
+      val alarmPut = new Put(Bytes.toBytes(arr._1))
+
       currentPut.addColumn(Bytes.toBytes("mmeinfo"), Bytes.toBytes("c_req_cnt"), Bytes.toBytes(arr._2.toString))
       currentPut.addColumn(Bytes.toBytes("mmeinfo"), Bytes.toBytes("c_req_sucesscnt"), Bytes.toBytes(arr._3.toString))
       currentPut.addColumn(Bytes.toBytes("mmeinfo"), Bytes.toBytes("c_req_mdncnt"), Bytes.toBytes(arr._4.toString))
       currentPut.addColumn(Bytes.toBytes("mmeinfo"), Bytes.toBytes("c_req_mdnfailedcnt"), Bytes.toBytes(arr._5.toString))
+
+      alarmPut.addColumn(Bytes.toBytes("alarmChk"), Bytes.toBytes("mme_c_time"), Bytes.toBytes(m5timeid))
+      alarmPut.addColumn(Bytes.toBytes("alarmChk"), Bytes.toBytes("mme_c_ratio"), Bytes.toBytes(arr._6))
       //转化成RDD[(ImmutableBytesWritable,Put)]类型才能调用saveAsHadoopDataset
-      (new ImmutableBytesWritable, currentPut)
+      ((new ImmutableBytesWritable, currentPut), (new ImmutableBytesWritable, alarmPut))
     }
     }
-    mmecurrentrdd.saveAsHadoopDataset(authJobConf)
+    mmecurrentrdd.map(_._1).saveAsHadoopDataset(authJobConf)
+    mmecurrentrdd.map(_._2).saveAsHadoopDataset(alarmChkJobConf)
 
     // 下一个时间窗口的mme日志
     val mmenextrdd = hbaserdd.map { arr => {
@@ -124,7 +138,7 @@ object MMELogTimeAnalysis extends Logging{
       s"""select  u.vpdncompanycode, m.pcause, count(*) as req_cnt
          |from iot_mme_log m, ${cachedUserinfoTable} u
          |where m.d=${partdayid} and m.h=${hourid} and m.m5 = ${m5id}
-         |and m.msisdn = u.mdn and m.pcause<>'success'
+         |and m.msisdn = u.mdn and m.result<>'success'
          |group by u.vpdncompanycode, m.pcause
        """.stripMargin
 
@@ -142,20 +156,20 @@ object MMELogTimeAnalysis extends Logging{
 
 
     val groupsql =
-      s""" select  u.vpdncompanycode, concat(m.newgrpid,'|', m.newmmecode) as mmedev, m.enbid, count(*)  as failed_cnt
+      s""" select  u.vpdncompanycode, m.province, concat(m.newgrpid,'|', m.newmmecode) as mmedev, m.enbid, count(*)  as failed_cnt
          |from iot_mme_log m, ${cachedUserinfoTable} u
          |where m.msisdn = u.mdn
-         |and m.d=${partdayid} and m.h=${hourid} and m.m5 = ${m5id}
-         |group by  u.vpdncompanycode, m.newgrpid, m.newmmecode, m.enbid
+         |and m.d=${partdayid} and m.h=${hourid} and m.m5 = ${m5id} and m.result<>'success'
+         |group by  u.vpdncompanycode, m.province, m.newgrpid, m.newmmecode, m.enbid
          |""".stripMargin
 
     val topnsql =
-      s"""select vpdncompanycode, mmedev, enbid, failed_cnt,
+      s"""select vpdncompanycode, province, mmedev, enbid, failed_cnt,
          |row_number() over(partition by vpdncompanycode  order by failed_cnt desc) as rn
          |from  (${groupsql}) t
        """.stripMargin
 
-    val failedsiterdd = sqlContext.sql(topnsql).coalesce(1).rdd.map(x => (x.getString(0), x.getString(1), x.getString(2), x.getLong(3), x.getInt(4).toString.formatted("%6s").replaceAll(" ", "0")))
+    val failedsiterdd = sqlContext.sql(topnsql).coalesce(1).rdd.map(x => (x.getString(0), x.getString(1), x.getString(2), x.getString(3), x.getLong(4), x.getInt(5).toString.formatted("%6s").replaceAll(" ", "0")))
 
     val hfailedtable = "iot_mme_failedsite_day_" + dayid
     // 如果h表不存在， 就创建
@@ -170,10 +184,11 @@ object MMELogTimeAnalysis extends Logging{
     failedsiteJobConf.set(TableOutputFormat.OUTPUT_TABLE, hfailedtable)
 
     val hbaseFailedsite = failedsiterdd.map { arr => {
-      val failedsitePut = new Put(Bytes.toBytes(arr._1.toString + "-" + curHourM5.toString + "-" + arr._5.toString))
-      failedsitePut.addColumn(Bytes.toBytes("mmeinfo"), Bytes.toBytes("mmedev"), Bytes.toBytes(arr._2.toString))
-      failedsitePut.addColumn(Bytes.toBytes("mmeinfo"), Bytes.toBytes("enbid"), Bytes.toBytes(arr._3.toString))
-      failedsitePut.addColumn(Bytes.toBytes("mmeinfo"), Bytes.toBytes("failed_cnt"), Bytes.toBytes(arr._4.toString))
+      val failedsitePut = new Put(Bytes.toBytes(arr._1.toString + "-" + curHourM5.toString + "-" + arr._6.toString))
+      failedsitePut.addColumn(Bytes.toBytes("mmeinfo"), Bytes.toBytes("province"), Bytes.toBytes(arr._2.toString))
+      failedsitePut.addColumn(Bytes.toBytes("mmeinfo"), Bytes.toBytes("mmedev"), Bytes.toBytes(arr._3.toString))
+      failedsitePut.addColumn(Bytes.toBytes("mmeinfo"), Bytes.toBytes("enbid"), Bytes.toBytes(arr._4.toString))
+      failedsitePut.addColumn(Bytes.toBytes("mmeinfo"), Bytes.toBytes("failed_cnt"), Bytes.toBytes(arr._5.toString))
       (new ImmutableBytesWritable, failedsitePut)
     }
     }
