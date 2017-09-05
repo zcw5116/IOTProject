@@ -23,7 +23,7 @@ object IotTerminalAnaly extends Logging{
     val terminalOutputPath = sc.getConf.get("spark.app.terminalOutputPath")  // /hadoop/IOT/data/terminal/output/
     val localOutputPath = sc.getConf.get("spark.app.localOutputPath")  // /slview/test/zcw/shell/terminal/json/
     val terminalResultTable = sc.getConf.get("spark.app.terminalResultTable")
-    val companyInfoTable = sc.getConf.get("spark.app.table.companyInfo") //"iot_activeduser_data_day"
+    //val companyInfoTable = sc.getConf.get("spark.app.table.companyInfo") //"iot_activeduser_data_day"
     val appName = sc.getConf.get("spark.app.name") // terminalmultiAnalysis_2017073111
     val coalesceNum = sc.getConf.get("spark.app.coalesceNum", "1")
 
@@ -41,16 +41,14 @@ object IotTerminalAnaly extends Logging{
       groupBy(userDF.col("custprovince"), userDF.col("vpdncompanycode"), terminalDF.col("devicetype"),
         terminalDF.col("modelname")).agg(count(lit(1)).alias("tercnt"))
 
-    val companyDF = sqlContext.table(companyInfoTable).select("companyCode", "companyName")
 
-    val  aggDF = aggTmpDF.join(companyDF, aggTmpDF.col("vpdncompanycode")===companyDF.col("companyCode"))
+    val  aggDF = aggTmpDF
 
 
     // 处理空值
     val resultDF = aggDF.select(lit(userTablePartitionDayid).alias("datetime"),
       when(aggDF.col("custprovince").isNull, "其他").otherwise(aggDF.col("custprovince")).alias("custprovince"),
-      when(aggDF.col("vpdncompanycode").isNull, "N999999999").otherwise(aggDF.col("vpdncompanycode")).alias("vpdncompanycode"),
-      when(aggDF.col("companyName").isNull, "其他").otherwise(aggDF.col("companyName")).alias("companyName"),
+      when(aggDF.col("vpdncompanycode").isNull, "N999999999").otherwise(aggDF.col("vpdncompanycode")).alias("companycode"),
       when(aggDF.col("devicetype").isNull, "").otherwise(aggDF.col("devicetype")).alias("devicetype"),
       when(aggDF.col("modelname").isNull, "").otherwise(aggDF.col("modelname")).alias("modelname"),
       aggDF.col("tercnt"))
