@@ -21,15 +21,16 @@ object CDRSecondETLDay extends Logging{
     sqlContext.sql("use " + ConfigProperties.IOT_HIVE_DATABASE)
 
     val appName = sc.getConf.get("spark.app.name") // name_20170731
-    val inputPath = sc.getConf.get("spark.app.cdr.inputPath") // hdfs://EPC-IOT-ES-06:8020/hadoop/IOT/data/cdr/secondaryoutput/pdsn/data  小时文件存放路径
-    val outputPath = sc.getConf.get("spark.app.outputPath") //"hdfs://EPC-IOT-ES-06:8020/hadoop/IOT/data/cdr/daysummery/pdsn/"            汇总后文件存放路径
-    val cdrSecondaryETLTable = sc.getConf.get("spark.app.summerytype.table") // "iot_cdr_data_pdsn_d"
-    val logType = sc.getConf.get("spark.app.cdr.logtype") // pdsn pgw haccg
+    val inputPath = sc.getConf.get("spark.app.inputPath") // hdfs://EPC-IOT-ES-06:8020/hadoop/IOT/data/cdr/secondaryoutput/pdsn/data  小时文件存放路径
+    val outputPath = sc.getConf.get("spark.app.outputPath") //"hdfs://EPC-IOT-ES-06:8020/hadoop/IOT/data/cdr/ETL/pdsn/"            汇总后文件存放路径
+    val cdrSecondaryETLTable = sc.getConf.get("spark.app.table.stored") // "iot_cdr_data_pdsn_d"
+    var logType:String = sc.getConf.get("spark.app.item.type") // pdsn pgw haccg
     val coalesceSize = sc.getConf.get("spark.app.coalesce.size").toInt //128
+    val timeid = sc.getConf.get("spark.app.timeid")//yyyymmddhhmiss
 
 
 
-    val dayid = appName.substring(appName.lastIndexOf("_") + 1) //"20170731"
+    val dayid = timeid.substring(0,8) //"20170731"
     val partitionD = dayid.substring(2,8)
     val fileSystem = FileSystem.get(sc.hadoopConfiguration)
 
@@ -41,8 +42,9 @@ object CDRSecondETLDay extends Logging{
       val cdrDF = sqlContext.read.format("orc").load(inputLocation)
       var resultDF: DataFrame = null
       if(logType == "pdsn"){
-         resultDF = cdrDF.select(cdrDF.col("mdn"),cdrDF.col("account_session_id"),cdrDF.col("acct_status_type"),cdrDF.col("originating")
-          ,cdrDF.col("termination").alias("upflow"),cdrDF.col("event_time").alias("downflow"),cdrDF.col("acct_input_packets"),cdrDF.col("acct_output_packets"),cdrDF.col("acct_session_time")
+         resultDF = cdrDF.select(cdrDF.col("mdn"),cdrDF.col("account_session_id"),cdrDF.col("acct_status_type"),cdrDF.col("upflow")
+          ,cdrDF.col("downflow"),cdrDF.col("event_time"),cdrDF.col("active_time"),
+           cdrDF.col("acct_input_packets"),cdrDF.col("acct_output_packets"),cdrDF.col("acct_session_time")
           ,cdrDF.col("vpdncompanycode"),cdrDF.col("custprovince"),cdrDF.col("cellid"),cdrDF.col("bsid")).withColumn("d", lit(partitionD))
 
       }else if(logType == "pgw"){
@@ -61,7 +63,7 @@ object CDRSecondETLDay extends Logging{
       // 结果数据分区字段
       val partitions = "d"
       // 将数据存入到HDFS， 并刷新分区表
-      CommonETLUtils.saveDFtoPartition(sqlContext, fileSystem, resultDF, coalesceNum, partitions, dayid, outputPath  + "/", cdrSecondaryETLTable, appName)
+      CommonETLUtils.saveDFtoPartition(sqlContext, fileSystem, resultDF, coalesceNum, partitions, dayid, outputPath , cdrSecondaryETLTable, appName)
 
     }
     catch {

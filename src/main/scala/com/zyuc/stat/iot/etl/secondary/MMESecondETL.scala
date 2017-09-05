@@ -4,8 +4,8 @@ import java.util.Date
 
 import com.zyuc.stat.iot.etl.util.CommonETLUtils.getTemplate
 import com.zyuc.stat.properties.ConfigProperties
+import com.zyuc.stat.utils.FileUtils
 import com.zyuc.stat.utils.FileUtils.makeCoalesce
-import com.zyuc.stat.utils.{DateUtils, FileUtils}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.SaveMode
@@ -27,24 +27,31 @@ object MMESecondETL extends Logging {
     val sqlContext = new HiveContext(sc)
     sqlContext.sql("use " + ConfigProperties.IOT_HIVE_DATABASE)
 
-    val appName = sc.getConf.get("spark.app.name")  // name_2017073111
-    val inputPath = sc.getConf.get("spark.app.mme.inputPath") //" hdfs://EPC-LOG-NM-15:8020/hadoop/IOT/ANALY_PLATFORM/MME/data/"
-    val outputPath = sc.getConf.get("spark.app.outputPath")  //"hdfs://EPC-LOG-NM-15:8020/hadoop/IOT/ANALY_PLATFORM/MME/secondETLData/"
-    val terminalTable = sc.getConf.get("spark.app.terminal.table") // "iot_dim_terminal"
+    val appName = sc.getConf.get("spark.app.name")  // name_{type}_h_2017073111
+    val inputPath = sc.getConf.get("spark.app.inputPath") //" hdfs://EPC-LOG-NM-15:8020/hadoop/IOT/ANALY_PLATFORM/MME/data/"
+    val outputPath = sc.getConf.get("spark.app.outputPath")  //"hdfs://EPC-IOT-ES-06:8020/hadoop/IOT/ANALY_PLATFORM/MME/secondETLData/"
     val userTable = sc.getConf.get("spark.app.user.table") //"iot_customer_userinfo"
-    val mmeLogTable = sc.getConf.get("spark.app.firstETL.mmelog.table") // "iot_mme_log"
-    val mmeLogDayHourTable = sc.getConf.get("spark.app.secondETL.mmelog.table")  // "iot_mme_log_hour"
+    val userTablePartitionID = sc.getConf.get("spark.app.user.userTablePatitionDayid")
+    val terminalTable = sc.getConf.get("spark.app.terminal.table") // "iot_dim_terminal"
+    val mmeLogTable = sc.getConf.get("spark.app.table.source") // "iot_mme_log"
+    val mmeLogDayHourTable = sc.getConf.get("spark.app.table.stored")  // "iot_mme_log_h"
+    val timeid = sc.getConf.get("spark.app.timeid")//yyyymmddhhmiss
     val coalesceSize = sc.getConf.get("spark.app.coalesce.size").toInt //128
 
-    val hourid = appName.substring(appName.lastIndexOf("_") + 1)  //"2017073111"
 
     val fileSystem = FileSystem.get(sc.hadoopConfiguration)
 
     // sqlContext.sql("set spark.sql.shuffle.partitions=500")
 
-    val partitionD = hourid.substring(2, 8)
-    val partitionH = hourid.substring(8, 10)
-    val preDayid = DateUtils.timeCalcWithFormatConvertSafe("hourid", "yyyymmddHH", -1*24*60*60, "yyyymmdd")
+    val partitionD = timeid.substring(2, 8)
+    val partitionH = timeid.substring(8,10)
+    val hourid = timeid.substring(0,10)
+    //var preDayid:String = DateUtils.timeCalcWithFormatConvertSafe("hourid", "yyyyMMddHH", -1*24*60*60, "yyyymmdd")
+    var preDayid:String = userTablePartitionID
+     if(userTablePartitionID != ""){
+       preDayid = userTablePartitionID
+     }
+    sqlContext.setConf("spark.sql.sources.partitionColumnTypeInference.enabled", "false")
     // mme第一次清洗保存到位置
     val inputLocation = inputPath + "/d=" + partitionD + "/h=" + partitionH
     try {

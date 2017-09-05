@@ -22,14 +22,15 @@ object CDRSecondETL extends Logging {
     sqlContext.sql("use " + ConfigProperties.IOT_HIVE_DATABASE)
 
 
-    val appName = sc.getConf.get("spark.app.name") // name_2017073111
-    val inputPath = sc.getConf.get("spark.app.cdr.inputPath") // "hdfs://EPC-LOG-NM-15:8020/hadoop/IOT/data/cdr/output/pdsn/data/"
+    val appName = sc.getConf.get("spark.app.name") // name_{}_2017073111
+    val inputPath = sc.getConf.get("spark.app.inputPath") // "hdfs://EPC-LOG-NM-15:8020/hadoop/IOT/data/cdr/output/pdsn/data/"
     val outputPath = sc.getConf.get("spark.app.outputPath") //"hdfs://EPC-LOG-NM-15:8020/hadoop/IOT/data/cdr/secondaryoutput/pdsn/"
-    val logType = sc.getConf.get("spark.app.cdr.logtype") // pdsn pgw haccg
+    var logType:String = sc.getConf.get("spark.app.item.type") // pdsn,pgw,haccg
     val userTable = sc.getConf.get("spark.app.user.table") //"iot_customer_userinfo"
     val userTablePatitionDayid = sc.getConf.get("spark.app.user.userTablePatitionDayid")
-    val cdrFirstETLTable = sc.getConf.get("spark.app.etl.first.table") // "iot_cdr_data_pdsn"
-    val cdrSecondaryETLTable = sc.getConf.get("spark.app.etl.secondary.table") // "iot_cdr_data_pdsn_day"
+    val cdrFirstETLTable = sc.getConf.get("spark.app.table.source") // "iot_cdr_data_pdsn"
+    val cdrSecondaryETLTable = sc.getConf.get("spark.app.table.stored") // "iot_cdr_data_pdsn_h"
+    val hourid = sc.getConf.get("spark.app.timeid")//yyyymmddhhmiss
     val coalesceSize = sc.getConf.get("spark.app.coalesce.size").toInt //128
 
 
@@ -52,12 +53,11 @@ object CDRSecondETL extends Logging {
       return
     }
 
-    val hourid = appName.substring(appName.lastIndexOf("_") + 1) //"2017073111"
 
     val fileSystem = FileSystem.get(sc.hadoopConfiguration)
 
     val partitionD = hourid.substring(2, 8)
-    val partitionH = hourid.substring(8, 10)
+    val partitionH = hourid.substring(8,10)
     // cdr第一次清洗保存到位置
     val inputLocation = inputPath + "/d=" + partitionD + "/h=" + partitionH
 
@@ -123,7 +123,7 @@ object CDRSecondETL extends Logging {
       // 结果数据分区字段
       val partitions = "d,h"
       // 将数据存入到HDFS， 并刷新分区表
-     CommonETLUtils.saveDFtoPartition(sqlContext, fileSystem, resultDF, coalesceNum, partitions, hourid, outputPath + logType + "/", cdrSecondaryETLTable, appName)
+     CommonETLUtils.saveDFtoPartition(sqlContext, fileSystem, resultDF, coalesceNum, partitions, hourid.substring(0,10), outputPath , cdrSecondaryETLTable, appName)
 
 
     }
