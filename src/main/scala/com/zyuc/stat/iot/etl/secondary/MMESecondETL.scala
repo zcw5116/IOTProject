@@ -9,6 +9,7 @@ import com.zyuc.stat.utils.FileUtils.makeCoalesce
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{Logging, SparkConf, SparkContext}
 
@@ -78,7 +79,7 @@ object MMESecondETL extends Logging {
           mmeDF.col("newgrpid"), mmeDF.col("newmmecode"), mmeDF.col("newmtmsi"), mmeDF.col("mmetype"),
           mmeDF.col("result"),
           terminalDF.col("tac"), terminalDF.col("modelname"), terminalDF.col("devicetype"),
-          userDF.col("vpdncompanycode"), userDF.col("custprovince"), mmeDF.col("d"), mmeDF.col("h"))
+          userDF.col("vpdncompanycode"), userDF.col("custprovince"), mmeDF.col("d")).withColumn("h", lit(partitionH))
 
 
       // 计算cloalesce的数量
