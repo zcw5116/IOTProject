@@ -27,12 +27,14 @@ object AuthlogSecondETL extends Logging {
     sqlContext.sql("use " + ConfigProperties.IOT_HIVE_DATABASE)
 
     val appName = sc.getConf.get("spark.app.name") // name_2017073111
-    val inputPath = sc.getConf.get("spark.app.auth.inputPath") // "hdfs://EPC-LOG-NM-15:8020/user/hive/warehouse/iot.db/iot_userauth_3gaaa/"
-    val outputPath = sc.getConf.get("spark.app.outputPath") //"hdfs://EPC-LOG-NM-15:8020/hadoop/IOT/ANALY_PLATFORM/AuthLog/secondETLData/"
-    val authlogType = sc.getConf.get("spark.app.auth.logtype") //"3g"
+    val inputPath = sc.getConf.get("spark.app.inputPath") // "hdfs://EPC-IOT-ES-06:8020/user/hive/warehouse/iot.db/iot_userauth_3gaaa/"
+    val outputPath = sc.getConf.get("spark.app.outputPath") //"hdfs://EPC-IOT-ES-06:8020/hadoop/IOT/ANALY_PLATFORM/AuthLog/secondETLData/"
+    val authlogType = sc.getConf.get("spark.app.item.type") //"3g,4g,vpdn"
     val userTable = sc.getConf.get("spark.app.user.table") //"iot_customer_userinfo"
-    val authLogTable = sc.getConf.get("spark.app.firstETL.auth.table") // "iot_userauth_3gaaa"
-    val authLogDayHourTable = sc.getConf.get("spark.app.secondETL.auth.table") // "iot_userauth_3gaaa_day_hour"
+    val userTablePartitionID = sc.getConf.get("spark.app.user.userTablePatitionDayid")
+    val authLogTable = sc.getConf.get("spark.app.table.source") // "iot_userauth_3gaaa"
+    val authLogDayHourTable = sc.getConf.get("spark.app.table.stored") // "iot_userauth_3gaaa_day_h"
+    val hourid = sc.getConf.get("spark.app.timeid")//yyyymmddhhmiss
     val coalesceSize = sc.getConf.get("spark.app.coalesce.size").toInt //128
 
     if (authlogType != AUTH_LOGTYPE_3G && authlogType != AUTH_LOGTYPE_4G && authlogType != AUTH_LOGTYPE_VPDN) {
@@ -40,15 +42,15 @@ object AuthlogSecondETL extends Logging {
       return
     }
 
-    val hourid = appName.substring(appName.lastIndexOf("_") + 1) //"2017073111"
+
 
     val fileSystem = FileSystem.get(sc.hadoopConfiguration)
 
     // sqlContext.sql("set spark.sql.shuffle.partitions=500")
 
     val partitionD = hourid.substring(0, 8)
-    val partitionH = hourid.substring(8, 10)
-    val preDayid = hourid.substring(0, 8)
+    val partitionH = hourid.substring(8,10)
+    val preDayid = userTablePartitionID
 
 
     // mme第一次清洗保存到位置
@@ -120,7 +122,7 @@ object AuthlogSecondETL extends Logging {
       // 结果数据分区字段
       val partitions = "d,h"
       // 将数据存入到HDFS， 并刷新分区表
-      CommonETLUtils.saveDFtoPartition(sqlContext, fileSystem, resultDF, coalesceNum, partitions, hourid, outputPath + authlogType + "/", authLogDayHourTable, appName)
+      CommonETLUtils.saveDFtoPartition(sqlContext, fileSystem, resultDF, coalesceNum, partitions, hourid.substring(0,10), outputPath, authLogDayHourTable, appName)
     }
     catch {
       case e: Exception =>
