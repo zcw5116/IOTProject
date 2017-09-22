@@ -32,6 +32,7 @@ object CDRAnalysis extends Logging{
     val userTable = sc.getConf.get("spark.app.table.userTable") //"iot_customer_userinfo"
     val pgwTable = sc.getConf.get("spark.app.table.pgwTable")     // iot_cdr_data_pgw
     val pdsnTable = sc.getConf.get("spark.app.table.pdsnTable")   // iot_cdr_data_pdsn
+    val haccgTable = sc.getConf.get("spark.app.table.haccgTable")   // iot_cdr_data_haccg
     // val pgwLocation = sc.getConf.get("spark.app.pgwLocation")    //  "/hadoop/IOT/data/cdr/pgw/output/data/"
     // val pdsnLocation = sc.getConf.get("spark.app.pdsnLocation")  //  "/hadoop/IOT/data/cdr/pdsn/output/data/"
 
@@ -54,6 +55,12 @@ object CDRAnalysis extends Logging{
          |where d='${partitionD}' and h='${partitionH}' and m5='${partitionM5}'
        """.stripMargin)
 
+    val haccgSrcDF = sqlContext.sql(
+      s"""select mdn, nvl(originating,0) as upflow, nvl(termination,0) as downflow, 'haccg' as type
+         |from $haccgTable
+         |where d='${partitionD}' and h='${partitionH}' and m5='${partitionM5}'
+       """.stripMargin)
+
     val pgwSrcDF = sqlContext.sql(
       s"""select mdn, nvl(l_datavolumefbcuplink,0) as upflow, nvl(l_datavolumefbcdownlink,0) as downflow, 'pgw' as type
          |from $pgwTable
@@ -62,9 +69,11 @@ object CDRAnalysis extends Logging{
 
     val tmpPdsnTable = "tmpPdsnTable_" + starttimeid
     val tmpPgwTable = "tmpPgwTable" + starttimeid
+    val tmpHaccgTable = "tmpHaccgTable" + starttimeid
 
     pdsnSrcDF.registerTempTable(tmpPdsnTable)
     pgwSrcDF.registerTempTable(tmpPgwTable)
+    haccgSrcDF.registerTempTable(tmpHaccgTable)
 
     val aggSQL =
       s"""
@@ -74,6 +83,8 @@ object CDRAnalysis extends Logging{
          |    select mdn, type, upflow, downflow from ${tmpPdsnTable}
          |    union all
          |    select mdn, type, upflow, downflow from ${tmpPgwTable}
+         |    union all
+         |    select mdn, type, upflow, downflow from ${tmpHaccgTable}
          |) t, ${tmpUserTable} u
          |where t.mdn=u.mdn
          |group by u.vpdncompanycode, t.type
