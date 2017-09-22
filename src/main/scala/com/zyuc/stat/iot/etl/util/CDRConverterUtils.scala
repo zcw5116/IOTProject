@@ -70,6 +70,31 @@ object CDRConverterUtils extends Logging{
         newDF = newDF.filter(newDF("l_timeoflastusage").isNotNull)
       }
       else if(authLogType==LOG_TYPE_HACCG){
+        newDF = df.selectExpr("MDN  as  mdn_2","T0  as  streamnumber","T1  as  acct_status_type",
+          "T10  as  source_ipv6_prefix","T11  as  ipv6_interface_id","T12  as  account_session_id",
+          "T13  as  correlation_id","T14  as  session_continue","T15  as  beginning_session",
+          "T16  as  service_reference_id","T17  as  flow_id_parameter","T18  as  home_agent",
+          "T19  as  pdsn_address","T2  as  roamflag","T20  as  serving_pcf","T21  as  bsid",
+          "T22  as  foreign_agent_address","T23  as  subnet","T24  as  carrier_id","T25  as  user_zone",
+          "T26  as  gmt_time_zone_offset","T27  as  service_option","T28  as  ip_technology",
+          "T29  as  compulsory_tunnel_indicator","T3  as  paidtype","T30  as  release_indicator",
+          "T31  as  always_on","T32  as  hot_line_accounting_indication","T33  as  flow_status",
+          "T34  as  termination","T35  as  originating","T36  as  bad_ppp_frame_count","T37  as  event_time",
+          "T38  as  active_time","T39  as  number_of_active_transitions","T4  as  mdn",
+          "T40  as  in_bound_mobile_ip_signaling_octet_count","T41  as  outbound_mobile_ip_signaling_octet_count",
+          "T42  as  last_user_activity_time","T43  as  filtered_terminating","T44  as  filtered_originating",
+          "T45  as  rsvp_inbound_octet_count","T46  as  rsvp_outbound_octet_count","T47  as  rsvp_inbound_packet_count",
+          "T48  as  rsvp_outbound_packet_count","T49  as  ip_quality_of_service","T5  as  msid",
+          "T50  as  granted_qos_parameters","T51  as  container","T52  as  acct_authentic",
+          "T53  as  acct_session_time","T54  as  acct_input_packets","T55  as  acct_output_packets",
+          "T56  as  acct_terminate_cause","T57  as  acct_input_gigawords","T58  as  acct_output_gigawords",
+          "T59  as  session_id","T6  as  esn","T60  as  chteprl_otherarea_access_id","T61  as  pmip_indicator",
+          "T62  as  ip_services_authorized","T63  as  pdsn_ipv6_address","T64  as  home_agent_ipv6_address",
+          "T65  as  foreign_agent_ipv6_address","T7  as  meid","T8  as  source_ip_address",
+          "T800  as  acce_province","T801  as  acce_region","T802  as  sid","T803  as  nid","T804  as  siteid",
+          "T805  as  sitename","T806  as  cellid","T807  as  cellname","T808  as  secid","T809  as  enterprise_name",
+          "T9  as  nai", "substr(regexp_replace(T37,'-',''),3,6) as d", "substr(T37,12,2) as h",
+          "lpad(floor(substr(T37,15,2)/5)*5,2,'0') as m5")
       }
     }catch {
       case e:Exception =>{
