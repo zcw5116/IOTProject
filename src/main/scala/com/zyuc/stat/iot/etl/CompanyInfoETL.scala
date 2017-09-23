@@ -11,7 +11,7 @@ import org.apache.spark.{Logging, SparkConf, SparkContext}
 /**
   * Created by zhoucw on 17-8-18.
   */
-object CompanyInfo extends Logging{
+object CompanyInfoETL extends Logging{
   def main(args: Array[String]): Unit = {
 
     val sparkConf = new SparkConf()//.setAppName("OperalogAnalysis").setMaster("local[4]")

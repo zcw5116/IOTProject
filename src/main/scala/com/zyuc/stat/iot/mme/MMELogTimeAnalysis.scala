@@ -2,7 +2,7 @@ package com.zyuc.stat.iot.mme
 
 import com.zyuc.stat.properties.ConfigProperties
 import com.zyuc.stat.utils.DateUtils.timeCalcWithFormatConvertSafe
-import com.zyuc.stat.utils.HbaseUtils
+import com.zyuc.stat.utils.{DateUtils, HbaseUtils}
 import org.apache.hadoop.hbase.HBaseConfiguration
 import org.apache.hadoop.hbase.client.{ConnectionFactory, Put}
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable
@@ -19,7 +19,7 @@ import com.zyuc.stat.utils.MathUtil.divOpera
 object MMELogTimeAnalysis extends Logging{
   def main(args: Array[String]): Unit = {
 
-    val sparkConf = new SparkConf()//.setMaster("local[4]").setAppName("fd")
+    val sparkConf = new SparkConf().setMaster("local[4]").setAppName("fd")
     val sc = new SparkContext(sparkConf)
     val sqlContext = new HiveContext(sc)
 
@@ -30,6 +30,17 @@ object MMELogTimeAnalysis extends Logging{
 
     sqlContext.sql("use " + ConfigProperties.IOT_HIVE_DATABASE)
     val m5timeid = sc.getConf.get("spark.app.m5timeid") // 201707211645
+    val ifUpdatelarmFlag = sc.getConf.get("spark.app.ifUpdatelarmFlag","1")
+    val userTablePartitionID = sc.getConf.get("spark.app.table.userTablePartitionDayID")
+    val userTable = sc.getConf.get("spark.app.table.userTable") //"iot_customer_userinfo"
+
+
+    var ifUpdatealarmChk = true
+    if(ifUpdatelarmFlag=="0"){
+      ifUpdatealarmChk = false
+    } else {
+      ifUpdatealarmChk = true
+    }
 
     val partdayid = m5timeid.substring(2,8) // 170721
     val hourid = m5timeid.substring(8,10) // 16
@@ -49,7 +60,7 @@ object MMELogTimeAnalysis extends Logging{
       s"""
          |CACHE TABLE ${cachedUserinfoTable} as
          |select u.mdn,case when length(u.vpdncompanycode)=0 then 'N999999999' else u.vpdncompanycode end  as vpdncompanycode
-         |from iot_user_basic_info u
+         |from ${userTable} u where d=${userTablePartitionID}
        """.stripMargin).coalesce(1)
 
     val mmeGroupsql =
@@ -62,6 +73,7 @@ object MMELogTimeAnalysis extends Logging{
          |        select m.msisdn as mdn, m.result,count(*) as req_cnt
          |        from iot_mme_log m
          |        where m.d=${partdayid} and m.h=${hourid} and m.m5 = ${m5id}
+         |              and m.isattach=1
          |        group by m.msisdn, m.result
          |    ) t, ${cachedUserinfoTable} u
          |where t.mdn = u.mdn
@@ -95,7 +107,7 @@ object MMELogTimeAnalysis extends Logging{
 
     // type, vpdncompanycode, authcnt, successcnt, failedcnt, authmdnct, authfaieldcnt
     val hbaserdd = mmeGroupDF.rdd.map(x => (x.getString(0), x.getLong(1), x.getLong(2), x.getLong(3),
-      x.getLong(4), divOpera(x.getLong(1).toString,x.getLong(2).toString) ))
+      x.getLong(4), divOpera(x.getLong(2).toString,x.getLong(1).toString) ))
 
     // 当前窗口的mme日志
     val mmecurrentrdd = hbaserdd.map { arr => {
@@ -113,12 +125,16 @@ object MMELogTimeAnalysis extends Logging{
 
       alarmPut.addColumn(Bytes.toBytes("alarmChk"), Bytes.toBytes("mme_c_time"), Bytes.toBytes(m5timeid))
       alarmPut.addColumn(Bytes.toBytes("alarmChk"), Bytes.toBytes("mme_c_ratio"), Bytes.toBytes(arr._6))
+
       //转化成RDD[(ImmutableBytesWritable,Put)]类型才能调用saveAsHadoopDataset
       ((new ImmutableBytesWritable, currentPut), (new ImmutableBytesWritable, alarmPut))
     }
     }
     mmecurrentrdd.map(_._1).saveAsHadoopDataset(authJobConf)
-    mmecurrentrdd.map(_._2).saveAsHadoopDataset(alarmChkJobConf)
+    if(ifUpdatealarmChk){
+      mmecurrentrdd.map(_._2).saveAsHadoopDataset(alarmChkJobConf)
+    }
+
 
     // 下一个时间窗口的mme日志
     val mmenextrdd = hbaserdd.map { arr => {
@@ -138,7 +154,7 @@ object MMELogTimeAnalysis extends Logging{
       s"""select  u.vpdncompanycode, m.pcause, count(*) as req_cnt
          |from iot_mme_log m, ${cachedUserinfoTable} u
          |where m.d=${partdayid} and m.h=${hourid} and m.m5 = ${m5id}
-         |and m.msisdn = u.mdn and m.result<>'success'
+         |      and m.msisdn = u.mdn and m.result<>'success' and m.isattach=1
          |group by u.vpdncompanycode, m.pcause
        """.stripMargin
 
@@ -159,7 +175,8 @@ object MMELogTimeAnalysis extends Logging{
       s""" select  u.vpdncompanycode, m.province, concat(m.newgrpid,'|', m.newmmecode) as mmedev, m.enbid, count(*)  as failed_cnt
          |from iot_mme_log m, ${cachedUserinfoTable} u
          |where m.msisdn = u.mdn
-         |and m.d=${partdayid} and m.h=${hourid} and m.m5 = ${m5id} and m.result<>'success'
+         |and m.d=${partdayid} and m.h=${hourid} and m.m5 = ${m5id}
+         |and m.result<>'success' and m.isattach=1
          |group by  u.vpdncompanycode, m.province, m.newgrpid, m.newmmecode, m.enbid
          |""".stripMargin
 

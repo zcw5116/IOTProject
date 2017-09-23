@@ -16,7 +16,7 @@ import scala.collection.mutable
 object CommonETLUtils extends Logging {
 
 
-  // 根据分区字符串生成分区模板, example: partitions = "d,h"  return:  /d=*/h=*
+  // 根据分区字符串生成分区模板, example: partitions = "d,h,m5"  return:  /d=*/h=*/m5=*
   def getTemplate(partitions: String): String = {
     var template = ""
     val partitionArray = partitions.split(",")
