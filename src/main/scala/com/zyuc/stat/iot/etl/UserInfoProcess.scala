@@ -76,10 +76,10 @@ object UserInfoProcess {
     val tmpDomainAndCompanyDF = userAndDomainAndCompanyDF.select("companycode", "vpdndomain", "belo_city", "belo_prov").distinct()
     val tmpProvinceMapcodeDF = sqlContext.read.format("text").load(provinceMapcodeFile)
     val provinceMapcodeDF = tmpProvinceMapcodeDF.map(x=>x.getString(0).split("\t",5)).map(x=>(x(0),x(1),x(2),x(3))).toDF("provincecode", "provincename", "citycode", "cityname")
-    tmpDomainAndCompanyDF.join(provinceMapcodeDF,
+    val DomainAndCompanyDF = tmpDomainAndCompanyDF.join(provinceMapcodeDF,
       tmpDomainAndCompanyDF.col("belo_prov")===provinceMapcodeDF.col("provincecode") && tmpDomainAndCompanyDF.col("belo_city")===provinceMapcodeDF.col("citycode")).
     select("companycode", "vpdndomain","provincecode","citycode","provincename","cityname")
-    tmpDomainAndCompanyDF.coalesce(1).write.format("orc").mode(SaveMode.Overwrite).save(companyAndDomainOutputPath)
+    DomainAndCompanyDF.coalesce(1).write.format("orc").mode(SaveMode.Overwrite).save(companyAndDomainOutputPath)
     sqlContext.sql(s"alter table $companyAndDomainTable add if not exists partition(d='$dataDayid') ")
 
     sc.stop()

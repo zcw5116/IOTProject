@@ -1,4 +1,4 @@
-package com.zyuc.iot.kafka
+package com.zyuc.iot.java.kafka
 
 import java.io.InputStream
 import com.zyuc.stat.singleton.IotSourceKafkaDealSingleton
