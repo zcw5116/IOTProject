@@ -18,14 +18,18 @@
 
     <properties>
       <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-      <spark.version>1.6.0</spark.version>
+      <spark.version>1.6.0-cdh5.7.0</spark.version>
       <jedis.version>2.8.2</jedis.version>
+      <hadoop.version>2.6.0-cdh5.7.0</hadoop.version>
       <fastjson.version>1.2.14</fastjson.version>
       <jetty.version>9.2.5.v20141112</jetty.version>
       <container.version>2.17</container.version>
       <java.version>1.7</java.version>
       <scala.version>2.10.6</scala.version>
     </properties>
+
+
+
     <dependencies>
       <dependency>
         <groupId>redis.clients</groupId>
@@ -35,7 +39,7 @@
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-common</artifactId>
-        <version>2.6.0-cdh5.7.0</version>
+        <version>${hadoop.version}</version>
         <exclusions>
           <exclusion>
             <groupId>javax.servlet</groupId>
@@ -46,7 +50,7 @@
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-hdfs</artifactId>
-        <version>2.6.0-cdh5.7.0</version>
+        <version>${hadoop.version}</version>
         <exclusions>
           <exclusion>
             <groupId>javax.servlet</groupId>
@@ -57,7 +61,7 @@
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-client</artifactId>
-        <version>2.6.0-cdh5.7.0</version>
+        <version>${hadoop.version}</version>
         <exclusions>
           <exclusion>
             <groupId>javax.servlet</groupId>
@@ -68,37 +72,54 @@
       <dependency>
         <groupId>org.apache.spark</groupId>
         <artifactId>spark-core_2.10</artifactId>
-        <version>1.6.0-cdh5.7.0</version>
+        <version>${spark.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.spark</groupId>
         <artifactId>spark-sql_2.10</artifactId>
-        <version>1.6.0-cdh5.7.0</version>
+        <version>${spark.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.spark</groupId>
         <artifactId>spark-streaming_2.10</artifactId>
-        <version>1.6.0-cdh5.7.0</version>
+        <version>${spark.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.spark</groupId>
         <artifactId>spark-yarn_2.10</artifactId>
-        <version>1.6.0-cdh5.7.0</version>
+        <version>${spark.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.spark</groupId>
         <artifactId>spark-hive_2.10</artifactId>
-        <version>1.6.0-cdh5.7.0</version>
+        <version>${spark.version}</version>
       </dependency>
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>18.0</version>
+        </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-client</artifactId>
         <version>1.2.0-cdh5.7.0</version>
+          <exclusions>
+              <exclusion>
+                  <groupId>com.google.guava</groupId>
+                  <artifactId>guava</artifactId>
+              </exclusion>
+          </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-server</artifactId>
         <version>1.2.0-cdh5.7.0</version>
+          <exclusions>
+              <exclusion>
+                  <groupId>com.google.guava</groupId>
+                  <artifactId>guava</artifactId>
+              </exclusion>
+          </exclusions>
       </dependency>
       <dependency>
         <groupId>com.alibaba</groupId>
@@ -121,6 +142,26 @@
         <groupId>org.apache.kafka</groupId>
         <artifactId>kafka_2.10</artifactId>
         <version>0.10.2.1</version>
+      </dependency>
+      <dependency>
+        <groupId>log4j</groupId>
+        <artifactId>log4j</artifactId>
+        <version>1.2.14</version>
+      </dependency>
+      <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-core</artifactId>
+        <version>2.8.1</version>
+      </dependency>
+      <dependency>
+        <groupId>org.codehaus.jackson</groupId>
+        <artifactId>jackson-mapper-asl</artifactId>
+        <version>1.9.0</version>
+      </dependency>
+      <dependency>
+        <groupId>org.elasticsearch</groupId>
+        <artifactId>elasticsearch</artifactId>
+        <version>2.2.0</version>
       </dependency>
       <dependency>
         <groupId>org.apache.spark</groupId>

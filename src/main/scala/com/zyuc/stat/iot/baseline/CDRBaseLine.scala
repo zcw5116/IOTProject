@@ -57,8 +57,8 @@ object CDRBaseLine {
     sqlContext.sql("use " + ConfigProperties.IOT_HIVE_DATABASE)
 
     val appName = sc.getConf.get("spark.app.name") // name_2017073111
-    val endDayid = sc.getConf.get("spark.app.baseLine.endDayid") // "hdfs://EPC-LOG-NM-15:8020/hadoop/IOT/data/cdr/output/pdsn/data/"
-    val intervalDayNums = sc.getConf.get("spark.app.baseLine.intervalDayNums").toInt //"hdfs://EPC-LOG-NM-15:8020/hadoop/IOT/data/cdr/secondaryoutput/pdsn/"
+    val endDayid = sc.getConf.get("spark.app.baseLine.endDayid") // "20170906"
+    val intervalDayNums = sc.getConf.get("spark.app.baseLine.intervalDayNums").toInt // “7”
     val hbaseFlowTablePrefix = sc.getConf.get("spark.app.hbaseFlowTablePrefix") // iot_cdr_flow_stat_
     val targetdayid = sc.getConf.get("spark.app.htable.targetdayid")
     // val logType = sc.getConf.get("spark.app.cdr.logtype")

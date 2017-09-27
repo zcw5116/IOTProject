@@ -10,9 +10,12 @@ import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.mapred.JobConf
 import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.StringType
 
 /**
   * Created by zhoucw on 17-8-29.
+  * 1000 200 200C
   */
 object CompanyInfo extends Logging{
 
@@ -25,20 +28,29 @@ object CompanyInfo extends Logging{
 
     val userTablePartitionID = sc.getConf.get("spark.app.table.userTablePartitionDayID")
     val userTable = sc.getConf.get("spark.app.table.userTable") //"iot_customer_userinfo"
+    val companyTable = sc.getConf.get("spark.app.table.companyTable") //"iot_basic_company"
+    val ifUpdateLatestInfo = sc.getConf.get("spark.app.ifUpdateLatestInfo","1") //  是否更新iot_basic_companyinfo的latestdate和cnt_latest, 0-不更新， 1-更新
     val appName = sc.getConf.get("spark.app.name")
-    val nextWeekDayid = DateUtils.timeCalcWithFormatConvertSafe(userTablePartitionID, "yyyyMMdd", 7*24*3600, "yyyyMMdd")
+
+    val userCompanyTmpTable = appName + "_userCompanyTmpTable"
+    val userCompanyDF = sqlContext.sql(
+      s"""select vpdncompanycode as companycode, count(*) as usernum
+         |from $userTable
+         |where d='$userTablePartitionID'
+         |group by  vpdncompanycode
+       """.stripMargin).registerTempTable(userCompanyTmpTable)
 
 
-    val tmpUserTable = appName + "_usertable_" +  userTablePartitionID
-    val userSQL =
-      s"""
-         |select mdn, imsicdma, custprovince, case when length(vpdncompanycode)=0 then 'N999999999' else vpdncompanycode end  as companycode
-         |from ${userTable} where d=${userTablePartitionID}
-       """.stripMargin
-    logInfo("userSQL: " + userSQL)
-    sqlContext.sql(userSQL).registerTempTable(tmpUserTable)
+    val resultDF = sqlContext.sql(
+      s"""select nvl(c.province,'-1') province, nvl(c.provincecode,'-1') provincecode,
+         |nvl(c.companycode,'-1') companycode, nvl(c.companyName,'-1') companyName,
+         |nvl(c.domain,'-1') domain, nvl(u.usernum,0) usernum,
+         |(case when u.usernum>=1000 then 'A' when u.usernum>=200 then 'B' else 'C' end) monilevel
+         |from  $companyTable c left join   $userCompanyTmpTable u
+         |on(u.companycode=c.companycode)
+       """.stripMargin)
 
-    val resultDF = sqlContext.sql(s"select companycode, count(*) as usernum from $tmpUserTable group by  companycode").coalesce(1)
+
 
     val htable = "iot_basic_companyinfo"
     // 如果h表不存在， 就创建
@@ -47,8 +59,9 @@ object CompanyInfo extends Logging{
     conf.set("hbase.zookeeper.property.clientPort", ConfigProperties.IOT_ZOOKEEPER_CLIENTPORT)
     conf.set("hbase.zookeeper.quorum", ConfigProperties.IOT_ZOOKEEPER_QUORUM)
     val connection = ConnectionFactory.createConnection(conf)
-    val families = new Array[String](1)
-    families(0) = "companyinfo"
+    val families = new Array[String](2)
+    families(0) = "basicinfo"
+    families(1) = "cardcnt"
     // 创建表, 如果表存在， 自动忽略
     HbaseUtils.createIfNotExists(htable, families)
     val companyJobConf = new JobConf(conf, this.getClass)
@@ -61,23 +74,31 @@ object CompanyInfo extends Logging{
     alarmChkJobConf.setOutputFormat(classOf[TableOutputFormat])
     alarmChkJobConf.set(TableOutputFormat.OUTPUT_TABLE, alarmChkTable)
 
-    val companyHbaseRDD = resultDF.rdd.map(x => (x.getString(0), x.getLong(1)))
+    val companyHbaseRDD = resultDF.coalesce(1).rdd.map(x => (x.getString(0),x.getString(1),x.getString(2),x.getString(3),x.getString(4), x.getLong(5),x.getString(6)))
     val companyRDD = companyHbaseRDD.map { arr => {
-      val curPut = new Put(Bytes.toBytes(arr._1 + "_" + userTablePartitionID.toString))
-      val nextWeekPut = new Put(Bytes.toBytes(arr._1 + "_" + nextWeekDayid))
-      val alarmPut = new Put(Bytes.toBytes(arr._1))
+      val curPut = new Put(Bytes.toBytes(arr._3))
+      val alarmPut = new Put(Bytes.toBytes(arr._3))
 
-      curPut.addColumn(Bytes.toBytes("companyinfo"), Bytes.toBytes("usernum"), Bytes.toBytes(arr._2.toString))
-      nextWeekPut.addColumn(Bytes.toBytes("companyinfo"), Bytes.toBytes("lastweek_usernum"), Bytes.toBytes(arr._2.toString))
+      curPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("province"), Bytes.toBytes(arr._1.toString))
+      curPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("provincecode"), Bytes.toBytes(arr._2.toString))
+      curPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("companyname"), Bytes.toBytes(arr._4.toString))
+      curPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("domain"), Bytes.toBytes(arr._5.toString))
+      curPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("monilevel_autocalc"), Bytes.toBytes(arr._7.toString))
 
-      alarmPut.addColumn(Bytes.toBytes("alarmChk"), Bytes.toBytes("usernum"), Bytes.toBytes(arr._2.toString))
 
-      ((new ImmutableBytesWritable, curPut),(new ImmutableBytesWritable, nextWeekPut),(new ImmutableBytesWritable, alarmPut))
+      if(ifUpdateLatestInfo == "1"){
+        curPut.addColumn(Bytes.toBytes("cardcnt"), Bytes.toBytes("cnt_latest"), Bytes.toBytes(arr._6.toString))
+        curPut.addColumn(Bytes.toBytes("cardcnt"), Bytes.toBytes("date_latest"), Bytes.toBytes(userTablePartitionID))
+      }
+      curPut.addColumn(Bytes.toBytes("cardcnt"), Bytes.toBytes("cnt_" + userTablePartitionID), Bytes.toBytes(arr._6.toString))
+
+      alarmPut.addColumn(Bytes.toBytes("alarmChk"), Bytes.toBytes("usernum"), Bytes.toBytes(arr._6.toString))
+
+      ((new ImmutableBytesWritable, curPut), (new ImmutableBytesWritable, alarmPut))
     }
     }
     companyRDD.map(_._1).saveAsHadoopDataset(companyJobConf)
-    // companyRDD.map(_._2).saveAsHadoopDataset(companyJobConf)
-    companyRDD.map(_._3).saveAsHadoopDataset(alarmChkJobConf)
+    companyRDD.map(_._2).saveAsHadoopDataset(alarmChkJobConf)
 
   }
 

@@ -119,14 +119,19 @@ object OnlineUser extends Logging {
     for (i <- 0 to intervalDay.toInt) {
       val dayid = DateUtils.timeCalcWithFormatConvertSafe(beginDay, "yyyyMMdd", i * 24 * 60 * 60, "yyyyMMdd")
       if (i == 0) {
-        hbaseDF = registerRDD(sc, "iot_detail_online_users_" + dayid).toDF().filter(s"time > ${startMinuTime}")
-      } else if (i == intervalDay) {
-        val tmpDF = registerRDD(sc, "iot_detail_online_users_" + dayid).toDF().filter(s"time <= ${endMinuTime}")
-        hbaseDF = hbaseDF.unionAll(tmpDF)
-      } else {
+        hbaseDF = registerRDD(sc, "iot_detail_online_users_" + dayid).toDF().filter(s"time >= ${startMinuTime}")
+      } else if(i < intervalDay) {
         val tmpDF = registerRDD(sc, "iot_detail_online_users_" + dayid).toDF()
         hbaseDF = hbaseDF.unionAll(tmpDF)
       }
+
+      if (i == intervalDay && intervalDay > 0) {
+        val tmpDF = registerRDD(sc, "iot_detail_online_users_" + dayid).toDF().filter(s"time <= ${endMinuTime}")
+        hbaseDF = hbaseDF.unionAll(tmpDF)
+      }else if(intervalDay == 0){
+        hbaseDF = hbaseDF.filter(s"time <= ${endMinuTime}")
+      }
+
     }
 
 
@@ -223,8 +228,13 @@ object OnlineUser extends Logging {
     sqlContext.sql(
       s"""
          |CACHE TABLE ${radiusTable} as
-         |select mdn, status, nettype, regexp_replace(terminatecause, ' ', '') as terminatecause
+         |select mdn, status, nettype, regexp_replace(terminatecause, ' ', '') as terminatecause,
+         |(case when terminatecause='UserRequest' then 'succ' else 'failed' end ) as result
          |from pgwradius_out where dayid='${dayid}' and time>='${startTime}'  and time<'${endTime}'
+         |union all
+         |select mdn, status, nettype, terminatecause
+         |(case when terminatecause in('2','7','8','9','11','12','13','14','15') then 'succ' else 'failed' end ) as result
+         |from iot_radius_ha where dayid='${dayid}' and time>='${startTime}'  and time<'${endTime}'
        """.stripMargin).coalesce(1)
 
 
@@ -289,7 +299,7 @@ object OnlineUser extends Logging {
          |sum(case when p.nettype='3G' then 1 else 0 end) as stopCause3GCnt,
          |sum(case when p.nettype='4G' then 1 else 0 end) as stopCause4GCnt
          |from ${radiusTable} p, ${cachedUserinfoTable} u
-         |where u.mdn = p.mdn and p.status='Stop' and p.terminatecause<>'UserRequest'
+         |where u.mdn = p.mdn and p.status='Stop' and p.result<>'succ'
          |group by u.vpdncompanycode, p.terminatecause
        """.stripMargin
     val radiusTermiateDF = sqlContext.sql(radiusTermiateSql).coalesce(1)
