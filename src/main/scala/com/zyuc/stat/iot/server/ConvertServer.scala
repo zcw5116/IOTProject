@@ -81,7 +81,7 @@ object ConvertServer {
             val logTableName = Params.getString("logTableName")
             serverInfo = "未知异常"
             serverInfo = CDRETL.doJob(sqlContext, fileSystem, appName, loadTime, inputPath, outputPath, fileWildcard, coalesceSize.toInt, logType, logTableName)
-          } else if(serverLine == "smssETL"){
+          } else if (serverLine == "smssETL") {
             val appName = Params.getString("appName")
             val loadTime = Params.getString("loadTime")
             val inputPath = Params.getString("inputPath")
@@ -92,9 +92,10 @@ object ConvertServer {
             val logTableName = Params.getString("logTableName")
             serverInfo = "未知异常"
             SMSCETL.doJob(sqlContext, fileSystem, appName, loadTime, inputPath, outputPath, fileWildcard, coalesceSize.toInt, logType, logTableName)
-          }else{
+          } else {
             System.out.println("go")
-        } catch {
+          }
+        }catch {
           case e: Exception =>
             e.printStackTrace()
             response = "失败"

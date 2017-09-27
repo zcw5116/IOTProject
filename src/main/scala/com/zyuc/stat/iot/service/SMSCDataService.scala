@@ -18,7 +18,7 @@ object SMSCDataService extends Logging{
     // 分钟级别 比如 8点20转换为： 0820
     val startM5 = starttimeid.substring(8, 12)
     val endM5 = DateUtils.timeCalcWithFormatConvertSafe(startM5, "HHmm", 5 * 60, "HHmm")
-    val dayid = yyyyMMddHHmm.substring(0, 8)
+    val dayid = starttimeid.substring(0, 8)
 
     val hbaseTable = "iot_smsc_stat_" + dayid
     var firstfamily =  "smscinfo"

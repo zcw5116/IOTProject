@@ -21,9 +21,9 @@ object SMSCETL extends Logging{
     val sc = new SparkContext(sparkConf)
     val sqlContext = new HiveContext(sc)
 
-    val loadTime = "201708071205"
-    val inputPath = "hdfs://cdh-nn1:8020/hadoop/IOT/data/cdr/pdsn/srcdata/"
-    val outputPath = "hdfs://cdh-nn1:8020/hadoop/IOT/data/cdr/output/pdsn/"
+    val loadTime = "201709271456"
+    val inputPath = "hdfs://cdh-nn1:8020/hadoop/IOT/data/smsc/srcdata/smsc/"
+    val outputPath = "hdfs://cdh-nn1:8020/hadoop/IOT/data/smsc/output/smsc/"
 
     val appName = "smsc_" + loadTime
     val fileWildcard = "*smsc*"
@@ -46,6 +46,7 @@ object SMSCETL extends Logging{
     }
     //第二步：更改文件目录名称
     val srcDoingLocation = inputPath + "/" + loadTime + "_doing"
+    val srcLocation = inputPath + "/" + loadTime
     val isRename = renameHDFSDir(fileSystem, srcLocation, srcDoingLocation)
     var result = "Success"
     if (!isRename) {
@@ -70,7 +71,7 @@ object SMSCETL extends Logging{
     // 结果数据分区字段
     val partitions = "d,h,m5"
     // 将数据存入到HDFS， 并刷新分区表
-    val executeResult = CommonETLUtils.saveDFtoPartition(sqlContext, fileSystem, cdrDF, coalesceNum, partitions, loadTime, outputPath, logTableName, appName)
+    val executeResult = CommonETLUtils.saveDFtoPartition(sqlContext, fileSystem, smscDF, coalesceNum, partitions, loadTime, outputPath, logTableName, appName)
     //第五步：更改源数据文件名称，标志读取已读
     val srcDoneLocation = inputPath + "/" + loadTime + "_done"
     val isDoneRename = renameHDFSDir(fileSystem, srcDoingLocation, srcDoneLocation)
@@ -124,7 +125,7 @@ object SMSCETL extends Logging{
       logError(logTypeErr)
       msg += logTypeErr
     }
-    if(coalesceSize.isEmpty){
+    if(coalesceSize!=0){
       val logTypeErr = "[" + appName + "] 日志coalesceSize为空\n"
       logError(logTypeErr)
       msg += logTypeErr
@@ -146,6 +147,7 @@ object SMSCETL extends Logging{
       logInfo(s"$srcLocation not exists.")
       msg+=s"$srcLocation not exists.\n"
     }
+    val srcDoingLocation = inputPath + "/" + loadTime + "_doing"
     val smscLocation = srcDoingLocation + "/" + fileWildcard
     val authFileExists = if (fileSystem.globStatus(new Path(smscLocation)).length > 0) true else false
     if (!authFileExists) {
