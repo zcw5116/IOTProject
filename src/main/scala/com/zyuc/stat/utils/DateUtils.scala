@@ -58,7 +58,6 @@ object DateUtils {
   }
 
   def timeCalcWithFormatConvertSafe(sourcetime:String, sourceformat:String, stepseconds:Long, targetformat:String):String = {
-
     val sourceDF:FastDateFormat = FastDateFormat.getInstance(sourceformat)
     val sourceDate:Date = sourceDF.parse(sourcetime)
     val sourceTime: Long = sourceDate.getTime() + stepseconds*1000

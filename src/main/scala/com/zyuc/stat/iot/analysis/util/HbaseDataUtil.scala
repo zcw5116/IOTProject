@@ -20,18 +20,15 @@ object HbaseDataUtil {
     * Desc: 将RDD数据写入hbase表
     * @author zhoucw
     * @param htable     数据写入hbase的表名
-    * @param familyarr  hbase表到列族数组
     * @param rdd        需要保存到hbase表的RDD
     */
-  def saveRddToHbase(htable: String, familyarr:Array[String], rdd:RDD[(ImmutableBytesWritable,Put)]):Unit={
+  def saveRddToHbase(htable: String, rdd:RDD[(ImmutableBytesWritable,Put)]):Unit={
 
     // hbase配置
     val conf = HBaseConfiguration.create()
     conf.set("hbase.zookeeper.property.clientPort", ConfigProperties.IOT_ZOOKEEPER_CLIENTPORT)
     conf.set("hbase.zookeeper.quorum", ConfigProperties.IOT_ZOOKEEPER_QUORUM)
 
-    // 创建表, 如果表存在， 自动忽略
-    HbaseUtils.createIfNotExists(htable,familyarr)
     val jobConf = new JobConf(conf, this.getClass)
     jobConf.setOutputFormat(classOf[TableOutputFormat])
     jobConf.set(TableOutputFormat.OUTPUT_TABLE, htable)

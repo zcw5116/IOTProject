@@ -73,7 +73,24 @@ object UserInfoProcess {
 
 
     // 企业和域名对应关系表
-    val tmpDomainAndCompanyDF = userAndDomainAndCompanyDF.select("companycode", "vpdndomain", "belo_city", "belo_prov").distinct()
+    val tmpCompanyTable = "tmpCompanyTable"
+    userAndDomainAndCompanyDF.select("companycode", "vpdndomain", "belo_city", "belo_prov").distinct().registerTempTable(tmpCompanyTable)
+
+    ////////////////////////////////////////////////////////////////////////////////////
+    // 对域名使用正则过滤： 1. fsznjt.vpdn.gd,,dl.vpdn.hn 清洗为： fsznjt.vpdn.gd,dl.vpdn.hn
+    //                  2. ,bdhbgl.vpdn.he 清洗为： bdhbgl.vpdn.he
+    ////////////////////////////////////////////////////////////////////////////////////
+    val tmpDomainAndCompanyDF =  sqlContext.sql(
+      s"""select companycode, belo_city, belo_prov, regexp_replace(regexp_replace(vpdndomain,'^,',''),',{2}',',') as vpdndomain
+         |from (
+         |select companycode, belo_city, belo_prov, concat_ws(',',collect_set(vpdndomain)) vpdndomain
+         |from ${tmpCompanyTable}
+         |where d='${dataDayid}'
+         |group by companycode, belo_city, belo_prov
+         |) m
+       """.stripMargin)
+
+
     val tmpProvinceMapcodeDF = sqlContext.read.format("text").load(provinceMapcodeFile)
     val provinceMapcodeDF = tmpProvinceMapcodeDF.map(x=>x.getString(0).split("\t",5)).map(x=>(x(0),x(1),x(2),x(3))).toDF("provincecode", "provincename", "citycode", "cityname")
     val DomainAndCompanyDF = tmpDomainAndCompanyDF.join(provinceMapcodeDF,

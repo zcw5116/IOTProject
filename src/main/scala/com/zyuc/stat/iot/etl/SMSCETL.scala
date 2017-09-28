@@ -22,8 +22,8 @@ object SMSCETL extends Logging{
     val sqlContext = new HiveContext(sc)
 
     val loadTime = "201709271456"
-    val inputPath = "hdfs://cdh-nn1:8020/hadoop/IOT/data/smsc/srcdata/smsc/"
-    val outputPath = "hdfs://cdh-nn1:8020/hadoop/IOT/data/smsc/output/smsc/"
+    val inputPath = "hdfs://EPC-IOT-ES-06:8020/hadoop/IOT/data/smsc/srcdata/smsc/"
+    val outputPath = "hdfs://EPC-IOT-ES-06:8020/hadoop/IOT/data/smsc/output/smsc/"
 
     val appName = "smsc_" + loadTime
     val fileWildcard = "*smsc*"
@@ -166,7 +166,7 @@ object SMSCETL extends Logging{
   def parseETL(df: DataFrame, logType:String) = {
     var smscDF:DataFrame = null
     try{
-      smscDF = df.selectExpr("(86|Called_Number) as Called_Number","Called_Type","(86|Calling_Number) as Calling_Number",
+      smscDF = df.selectExpr("concat('86',Called_Number,'') as Called_Number","Called_Type","concat('86',Calling_Number,'') as Calling_Number",
         "Calling_Type","CommitTime","FinishTime","Number_of_Transmission",
         "Result_of_First_Send","Result_of_Last_Send","Time_of_First_Issued",
         "substr(regexp_replace(CommitTime,'-',''),3,6) as d", "substr(CommitTime,12,2) as h",
