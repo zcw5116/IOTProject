@@ -1,6 +1,6 @@
 package com.zyuc.stat.iot.baseline
 
-import com.zyuc.stat.iot.baseline.caseclass.HbaseMME
+import com.zyuc.stat.iot.analysis.baseline.caseclass.HbaseMME
 import com.zyuc.stat.properties.ConfigProperties
 import com.zyuc.stat.utils.{DateUtils, HbaseUtils}
 import org.apache.hadoop.hbase.HBaseConfiguration
@@ -56,7 +56,7 @@ class MMEBaseLine {
     for (i <- 0 until intervalDayNums) {
       val dayid = DateUtils.timeCalcWithFormatConvertSafe(endDayid, "yyyyMMdd", -i * 24 * 60 * 60, "yyyyMMdd")
       if (i == 0) {
-        hbaseDF = registerRDD(sc, hbaseMMETablePrefix + dayid).toDF()
+        //hbaseDF = registerRDD(sc, hbaseMMETablePrefix + dayid).toDF()
       }
       if (i > 0) {
         hbaseDF = hbaseDF.unionAll(registerRDD(sc, hbaseMMETablePrefix + dayid).toDF())

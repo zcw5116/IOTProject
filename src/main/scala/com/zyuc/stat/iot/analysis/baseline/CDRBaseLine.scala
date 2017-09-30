@@ -1,6 +1,6 @@
-package com.zyuc.stat.iot.baseline
+package com.zyuc.stat.iot.analysis.baseline
 
-import com.zyuc.stat.iot.baseline.caseclass.HbaseCDRFlow
+import com.zyuc.stat.iot.analysis.baseline.caseclass.HbaseCDRFlow
 import com.zyuc.stat.properties.ConfigProperties
 import com.zyuc.stat.utils.{DateUtils, HbaseUtils}
 import org.apache.hadoop.hbase.HBaseConfiguration

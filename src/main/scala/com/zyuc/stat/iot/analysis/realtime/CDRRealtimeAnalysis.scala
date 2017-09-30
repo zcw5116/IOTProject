@@ -21,6 +21,14 @@ object CDRRealtimeAnalysis extends Logging{
 
   /**
     * 主函数
+    * 话单统计规则：
+    * 1. 3g话单
+    *     vpdn：pdsn清单中t8(source_ip_address)=0.0.0.0
+    *     定向、普通：haccg
+    * 2. 4g话单
+    *     定向： 关联用户表含有定向标识的。
+    *     vpdn： 关联用户表，排除定向， 限制用户表的属性为vpdn，用户的域名包含或者等于话单中的域名或者话单中包含private.vpdn/public.vpdn
+    *     普通： 其他号码归属到普通业务
     * @param args
     */
   def main(args: Array[String]): Unit = {
@@ -37,9 +45,9 @@ object CDRRealtimeAnalysis extends Logging{
     val companyAndDomainTable = sc.getConf.get("spark.app.table.companyAndDomainTable", "iot_basic_company_and_domain")
     val userTableDataDayid = sc.getConf.get("spark.app.table.userTableDataDayid")
 
-    val auth3gTable = sc.getConf.get("spark.app.table.pdsnTable", "iot_cdr_data_pdsn")
-    val auth4gTable = sc.getConf.get("spark.app.table.haccgTable", "iot_cdr_data_haccg")
-    val authVPDNTable = sc.getConf.get("spark.app.table.pgwVPDNTable", "iot_cdr_data_pgw")
+    val pdsnTable = sc.getConf.get("spark.app.table.pdsnTable", "iot_cdr_data_pdsn")
+    val haccgTable = sc.getConf.get("spark.app.table.haccgTable", "iot_cdr_data_haccg")
+    val pgwTable = sc.getConf.get("spark.app.table.pgwVPDNTable", "iot_cdr_data_pgw")
     val alarmHtablePre = sc.getConf.get("spark.app.htable.alarmTablePre", "analyze_summ_tab_")
     val resultHtablePre = sc.getConf.get("spark.app.htable.resultHtablePre", "analyze_summ_rst_everycycle_")
     val resultDayHtable = sc.getConf.get("spark.app.htable.resultDayHtable", "analyze_summ_rst_everyday")
@@ -74,9 +82,9 @@ object CDRRealtimeAnalysis extends Logging{
     val endTimeStr = DateUtils.timeCalcWithFormatConvertSafe(dataTime, "yyyyMMddHHmm", 0, "yyyy-MM-dd HH:mm:ss")
     // 转换成hive表中的分区字段值
     val startTime =  DateUtils.timeCalcWithFormatConvertSafe(dataTime, "yyyyMMddHHmm", -5*60, "yyyyMMddHHmm")
-    val partitionD = startTime.substring(0, 8)
+    val partitionD = startTime.substring(2, 8)
     val partitionH = startTime.substring(8, 10)
-    val partitionM5 = startTime.substring(8, 12)
+    val partitionM5 = startTime.substring(10, 12)
 
     /////////////////////////////////////////////////////////////////////////////////////////
     //  Hbase 相关的表
@@ -117,44 +125,42 @@ object CDRRealtimeAnalysis extends Logging{
     val userInfoTableCached = "userInfoTableCached"
     sqlContext.sql(s"cache table ${userInfoTableCached} as select mdn, imsicdma, companycode, vpdndomain, isvpdn, isdirect from $userInfoTable where d=$userTableDataDayid")
 
-    //val userAndDomainTableCached = "userAndDomainTableCached"
-    //sqlContext.sql(s"cache table ${userAndDomainTableCached} as select mdn, companycode, isvpdn, vpdndomain from $userAndDomainTable where d=$userTableDataDayid")
+    val userAndDomainTableCached = "userAndDomainTableCached"
+    sqlContext.sql(s"cache table ${userAndDomainTableCached} as select mdn, companycode, isvpdn, vpdndomain, apn from $userAndDomainTable where d=$userTableDataDayid")
+
+
 
     // 关联3g的mdn, domain,  基站
     val mdnSql =
       s"""
-         |select u.companycode, m.type, m.mdn,
-         |(case when u.isdirect=1 then 'D' when u.isvpdn=1 and array_contains(split(vpdndomain,','), m.mdndomain) then 'C' else 'P' end) as servtype,
-         |(case when u.isdirect != 1  and u.isvpdn=1 and array_contains(split(vpdndomain,','), m.mdndomain) then m.mdndomain else '-1' end) as mdndomain,
-         |auth_result, nasportid, result
+         |select u.companycode, '3g' type, a.mdn,
+         |       'C' as servtype,
+         |       (case when array_contains(split(vpdndomain,','), regexp_replace(nai,'.*@','')) then regexp_replace(nai,'.*@','') else vpdndomain end) as mdndomain,
+         |       a.bsid, a.termination as downflow, a.originating as upflow
+         |from  ${pdsnTable} a, ${userInfoTableCached} u
+         |where a.d = '${partitionD}'  and a.h = '${partitionH}' and a.m5='${partitionM5}'
+         |      and a.source_ip_address='0.0.0.0'
+         |      and a.mdn = u.mdn
+         |union all
+         |select u.companycode, '3g' type, a.mdn,
+         |       (case when u.isdirect=1 then 'D' else 'P' end) as servtype,
+         |       '-1' as mdndomain,
+         |       a.bsid, a.termination as downflow, a.originating as upflow
+         |from ${haccgTable} a, ${userInfoTableCached} u
+         |where a.d = '${partitionD}'  and a.h = '${partitionH}' and a.m5='${partitionM5}'
+         |      and u.mdn = a.mdn
+         |union all
+         |select u.companycode, '4g' type, u.mdn,
+         |       (case when u.isdirect=1 then 'D' when u.isvpdn=1 and array_contains(split(vpdndomain,','), mdndomain) then 'C' else 'P' end) as servtype,
+         |       (case when u.isdirect!=1 and array_contains(split(vpdndomain,','), mdndomain) then mdndomain else '-1' end) as mdndomain,
+         |       "-1" bsid, downflow, upflow
+         |from ( select p.mdn, isvpdn, t.vpdndomain as mdndomain, nvl(l_datavolumefbcdownlink,0) as downflow, nvl(l_datavolumefbcuplink,0) as upflow
          |from
-         |(
-         |select '3g' type, u.mdn,
-         |       regexp_extract(a.nai_sercode, '^.+@(.*)', 1) as mdndomain,
-         |       a.auth_result, a.nasportid,
-         |       case when a.auth_result = 0 then 's' else 'f' end as result
-         |from  ${userInfoTableCached} u, ${auth3gTable} a
-         |where a.dayid = '${partitionD}'  and a.hourid = '${partitionH}'
-         |      and u.imsicdma = a.imsicdma
-         |      and a.auth_time >= '${startTimeStr}' and a.auth_time < '${endTimeStr}'
-         |union all
-         |select '4g' type, a.mdn,
-         |       regexp_extract(a.nai_sercode, '^.+@(.*)', 1) as  mdndomain,
-         |       a.auth_result, a.nasportid,
-         |       case when a.auth_result = 0 then 's' else 'f' end as result
-         |from ${auth4gTable} a
-         |where a.dayid = '${partitionD}'  and a.hourid = '${partitionH}'
-         |      and a.auth_time >= '${startTimeStr}' and a.auth_time < '${endTimeStr}'
-         |union all
-         |select 'vpdn' type, a.mdn,
-         |       regexp_extract(a.nai_sercode, '^.+@(.*)', 1) as mdndomain,
-         |       a.auth_result, "-1" as nasportid,
-         |       case when a.auth_result = 1 then 's' else 'f' end as result
-         |from ${authVPDNTable} a
-         |where a.dayid = '${partitionD}'  and a.hourid = '${partitionH}'
-         |      and a.auth_time >= '${startTimeStr}' and a.auth_time < '${endTimeStr}'
-         |) m, ${userInfoTableCached} u
-         |where m.mdn = u.mdn
+         |${pgwTable} p, ${userAndDomainTableCached} t
+         |where p.d = '${partitionD}'  and p.h = '${partitionH}' and p.m5='${partitionM5}'
+         |      and p.mdn = t.mdn and p.accesspointnameni = t.apn
+         |) m,  ${userInfoTableCached} u
+         |where u.mdn = m.mdn
        """.stripMargin
 
 

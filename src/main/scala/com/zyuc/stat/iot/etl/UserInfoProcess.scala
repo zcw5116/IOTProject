@@ -40,6 +40,8 @@ object UserInfoProcess {
     val companyAndDomainTable = sc.getConf.get("spark.app.companyAndDomainTable", "iot_basic_company_and_domain")
 
     val provinceMapcodeFile = sc.getConf.get("spark.app.provinceMapcodeFile", "/hadoop/IOT/ANALY_PLATFORM/BasicData/iotDimMapcodeProvince/iot_dim_mapcode_province.txt")
+    val vpnToApnMapFile = sc.getConf.get("spark.app.vpnToApnMapFile", "/hadoop/IOT/ANALY_PLATFORM/BasicData/VpdnToApn/vpdntoapn.txt")
+
 
     //val outputPath = "/hadoop/IOT/ANALY_PLATFORM/BasicData/output/UserInfo/"
     val fileWildcard = sc.getConf.get("spark.app.fileWildcard", "all_userinfo_qureyes_20170922*" )
@@ -48,6 +50,13 @@ object UserInfoProcess {
     val fileSystem = FileSystem.get(sc.hadoopConfiguration)
     val fileLocation = inputPath + "/" + fileWildcard // "/hadoop/IOT/ANALY_PLATFORM/BasicData/UserInfo/incr_userinfo_qureyes_20170919193212.txt.001.001"
     val crttime = DateUtils.getNowTime("yyyy-MM-dd HH:mm:ss")
+
+
+    val apnMap = new mutable.HashMap[String, String]()
+    val vpnToApnRDD = sqlContext.read.format("text").load(vpnToApnMapFile).map(x=>x.getString(0).split(","))
+    vpnToApnRDD.collect().foreach(x=>
+      apnMap.+=(x(0)->x(1))
+    )
 
     val textDF = sqlContext.read.format("text").load(fileLocation)
 
@@ -63,11 +72,14 @@ object UserInfoProcess {
     val userAndDomainAndCompanyDF = tmpDF.rdd.flatMap(line=>{
       val vpdndomain = line(4).toString
       val domainList = vpdndomain.split(",")
-      val domainSet = new mutable.HashSet[Tuple15[String, String, String,String, String, String, String, String,String, String, String, String, String, String, String]]
-      domainList.foreach(e=>domainSet.+=((line(0).toString,line(1).toString,line(2).toString,line(3).toString,e,line(5).toString,line(6).toString,line(7).toString,line(8).toString,
-        line(9).toString,line(10).toString,line(11).toString,line(12).toString,line(13).toString,line(14).toString)))
+      val domainSet = new mutable.HashSet[Tuple16[String, String, String,String, String, String, String, String, String,String, String, String, String, String, String, String]]
+      domainList.foreach(e=>{
+        val apn = apnMap.get(e).toString
+        domainSet.+=((line(0).toString,line(1).toString,line(2).toString,line(3).toString,e, apn, line(5).toString,line(6).toString,line(7).toString,line(8).toString,
+          line(9).toString,line(10).toString,line(11).toString,line(12).toString,line(13).toString,line(14).toString))
+      })
       domainSet
-    }).toDF("mdn", "imsicdma", "imsilte", "companycode", "vpdndomain", "isvpdn", "isdirect", "userstatus", "atrbprovince", "userprovince", "belo_city", "belo_prov", "custstatus", "custtype", "prodtype")
+    }).toDF("mdn", "imsicdma", "imsilte", "companycode", "vpdndomain", "apn", "isvpdn", "isdirect", "userstatus", "atrbprovince", "userprovince", "belo_city", "belo_prov", "custstatus", "custtype", "prodtype")
     userAndDomainAndCompanyDF.coalesce(7).write.format("orc").mode(SaveMode.Overwrite).save(userAndDomainOutputPath)
     sqlContext.sql(s"alter table $userAndDomainTable add if not exists partition(d='$dataDayid') ")
 
@@ -85,7 +97,6 @@ object UserInfoProcess {
          |from (
          |select companycode, belo_city, belo_prov, concat_ws(',',collect_set(vpdndomain)) vpdndomain
          |from ${tmpCompanyTable}
-         |where d='${dataDayid}'
          |group by companycode, belo_city, belo_prov
          |) m
        """.stripMargin)

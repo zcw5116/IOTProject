@@ -8,6 +8,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable
 import org.apache.hadoop.hbase.mapred.TableOutputFormat
 import org.apache.hadoop.mapred.JobConf
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.DataFrame
 
 /**
   * Desc: 数据与hbase接口
@@ -36,4 +37,8 @@ object HbaseDataUtil {
     rdd.saveAsHadoopDataset(jobConf)
   }
 
+  def htableToDataFrame(htable:String) :DataFrame = {
+
+    null
+  }
 }

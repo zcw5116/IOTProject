@@ -1,4 +1,4 @@
-package com.zyuc.stat.iot.baseline.caseclass
+package com.zyuc.stat.iot.analysis.baseline.caseclass
 
 /**
   * Created by zhoucw on 17-9-15.
