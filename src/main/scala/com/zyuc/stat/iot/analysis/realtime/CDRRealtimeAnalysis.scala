@@ -39,7 +39,7 @@ object CDRRealtimeAnalysis extends Logging{
     sqlContext.sql("use " + ConfigProperties.IOT_HIVE_DATABASE)
 
     // 获取参数
-    val appName = sc.getConf.get("spark.app.name","name_201708010040") // name_201708010040
+    val appName = sc.getConf.get("spark.app.name","name_201710070040") // name_201708010040
     val userInfoTable = sc.getConf.get("spark.app.table.userInfoTable", "iot_basic_userinfo") //
     val userAndDomainTable = sc.getConf.get("spark.app.table.userAndDomainTable", "iot_basic_user_and_domain")
     val companyAndDomainTable = sc.getConf.get("spark.app.table.companyAndDomainTable", "iot_basic_company_and_domain")
@@ -52,6 +52,14 @@ object CDRRealtimeAnalysis extends Logging{
     val resultHtablePre = sc.getConf.get("spark.app.htable.resultHtablePre", "analyze_summ_rst_everycycle_")
     val resultDayHtable = sc.getConf.get("spark.app.htable.resultDayHtable", "analyze_summ_rst_everyday")
     val analyzeBPHtable = sc.getConf.get("spark.app.htable.analyzeBPHtable", "analyze_bp_tab")
+
+    val vpnToApnMapFile = sc.getConf.get("spark.app.vpnToApnMapFile", "/hadoop/IOT/ANALY_PLATFORM/BasicData/VpdnToApn/vpdntoapn.txt")
+
+    import  sqlContext.implicits._
+
+    val vpnToApnDF  = sqlContext.read.format("text").load(vpnToApnMapFile).map(x=>x.getString(0).split(",")).map(x=>(x(0),x(1))).toDF("vpdndomain","apn")
+    val vpdnAndApnTable = "vpdnAndApnTable"
+    vpnToApnDF.registerTempTable(vpdnAndApnTable)
 
 
     // 实时分析类型： 0-后续会离线重跑数据, 2-后续不会离线重跑数据
@@ -126,50 +134,53 @@ object CDRRealtimeAnalysis extends Logging{
     sqlContext.sql(s"cache table ${userInfoTableCached} as select mdn, imsicdma, companycode, vpdndomain, isvpdn, isdirect from $userInfoTable where d=$userTableDataDayid")
 
     val userAndDomainTableCached = "userAndDomainTableCached"
-    sqlContext.sql(s"cache table ${userAndDomainTableCached} as select mdn, companycode, isvpdn, vpdndomain, apn from $userAndDomainTable where d=$userTableDataDayid")
+    sqlContext.sql(s"cache table ${userAndDomainTableCached} as select mdn, companycode, isvpdn, vpdndomain, apn, isdirect from $userAndDomainTable where d=$userTableDataDayid")
 
 
 
     // 关联3g的mdn, domain,  基站
     val mdnSql =
       s"""
+         |select companycode, type, mdn, servtype, mdndomain as vpdndomain, bsid, downflow, upflow
+         |from
+         |(
          |select u.companycode, '3g' type, a.mdn,
          |       'C' as servtype,
-         |       (case when array_contains(split(vpdndomain,','), regexp_replace(nai,'.*@','')) then regexp_replace(nai,'.*@','') else vpdndomain end) as mdndomain,
+         |       (case when array_contains(split(vpdndomain,','), regexp_replace(nai,'.*@','')) then regexp_replace(nai,'.*@','') else vpdndomain end) as mdndomains,
          |       a.bsid, a.termination as downflow, a.originating as upflow
          |from  ${pdsnTable} a, ${userInfoTableCached} u
          |where a.d = '${partitionD}'  and a.h = '${partitionH}' and a.m5='${partitionM5}'
          |      and a.source_ip_address='0.0.0.0'
-         |      and a.mdn = u.mdn
+         |      and a.mdn = u.mdn and u.isvpdn='1'
+         |) t lateral view explode(split(t.mdndomains,',')) c as mdndomain
          |union all
          |select u.companycode, '3g' type, a.mdn,
          |       (case when u.isdirect=1 then 'D' else 'P' end) as servtype,
-         |       '-1' as mdndomain,
+         |       '-1'  as vpdndomain,
          |       a.bsid, a.termination as downflow, a.originating as upflow
          |from ${haccgTable} a, ${userInfoTableCached} u
          |where a.d = '${partitionD}'  and a.h = '${partitionH}' and a.m5='${partitionM5}'
          |      and u.mdn = a.mdn
          |union all
          |select u.companycode, '4g' type, u.mdn,
-         |       (case when u.isdirect=1 then 'D' when u.isvpdn=1 and array_contains(split(vpdndomain,','), mdndomain) then 'C' else 'P' end) as servtype,
-         |       (case when u.isdirect!=1 and array_contains(split(vpdndomain,','), mdndomain) then mdndomain else '-1' end) as mdndomain,
-         |       "-1" bsid, downflow, upflow
-         |from ( select p.mdn, isvpdn, t.vpdndomain as mdndomain, nvl(l_datavolumefbcdownlink,0) as downflow, nvl(l_datavolumefbcuplink,0) as upflow
+         |(case when u.isdirect='1' then 'D' when u.isvpdn=1 and array_contains(split(u.vpdndomain,','), d.vpdndomain) then 'C' else 'P' end) as servtype,
+         |(case when u.isdirect!='1' and array_contains(split(u.vpdndomain,','), d.vpdndomain) then d.vpdndomain else '-1' end)  as vpdndomain,
+         |"-1" bsid, downflow, upflow
          |from
-         |${pgwTable} p, ${userAndDomainTableCached} t
-         |where p.d = '${partitionD}'  and p.h = '${partitionH}' and p.m5='${partitionM5}'
-         |      and p.mdn = t.mdn and p.accesspointnameni = t.apn
-         |) m,  ${userInfoTableCached} u
-         |where u.mdn = m.mdn
+         |(
+         |    select p.mdn,p.accesspointnameni as apn, t.companycode, t.vpdndomain, t.isdirect, t.isvpdn,
+         |           nvl(l_datavolumefbcdownlink,0) as downflow, nvl(l_datavolumefbcuplink,0) as upflow
+         |    from ${pgwTable} p, ${userInfoTableCached} t
+         |    where p.mdn = t.mdn and p.d = '${partitionD}'  and p.h = '${partitionH}' and p.m5='${partitionM5}'
+         |) u
+         |left join ${vpdnAndApnTable} d
+         |on(u.apn = d.apn and array_contains(split(u.vpdndomain,','),d.vpdndomain) )
        """.stripMargin
-
 
 
     val mdnTable = "mdnTable_" + startTime
     sqlContext.sql(mdnSql).registerTempTable(mdnTable)
     sqlContext.cacheTable(mdnTable)
-
-
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // 统计普通业务/定向业务/总的业务数据
@@ -185,23 +196,14 @@ object CDRRealtimeAnalysis extends Logging{
     val statSQL =
       s"""
          |select companycode, servtype, vpdndomain, type,
-         |       sum(reqcnt) as req_cnt,
-         |       sum(reqsucccnt) as req_s_cnt,
-         |       count(distinct mdn) as req_card_cnt,
-         |       sum(case when result='s' then 1 else 0 end) as req_card_s_cnt,
-         |       sum(case when result='f' then 1 else 0 end) as req_card_f_cnt,
+         |       sum(upflow) as upflow,
+         |       sum(downflow) as downflow,
+         |       avg(upflow) as avgupflow,
+         |       avg(downflow) as avgdownflow,
          |       GROUPING__ID
-         |from
-         |(
-         |    select t.companycode, t.servtype, t.mdndomain as vpdndomain, t.type, t.mdn, t.result,
-         |           count(*) as reqcnt,
-         |           sum(case when result='s' then 1 else 0 end) reqsucccnt
-         |    from ${mdnTable} t
-         |    group by t.companycode, t.servtype, t.mdndomain, t.type, t.mdn, t.result
-         |) m
+         |from ${mdnTable}  m
          |group by companycode, servtype, vpdndomain, type
          |GROUPING SETS (companycode,(companycode, type),(companycode, servtype),(companycode, servtype, vpdndomain), (companycode, servtype, type), (companycode, servtype, vpdndomain, type))
-         |ORDER BY GROUPING__ID
        """.stripMargin
 
     // 对域名为-1的记录做过滤
@@ -229,63 +231,51 @@ object CDRRealtimeAnalysis extends Logging{
 
 
     val resultRDD = statDF.rdd.map(x=>{
-      val companyCode = x(0).toString
+      val companyCode = if(null == x(0)) "-1" else x(0).toString
       val servType = if(null == x(1)) "-1" else x(1).toString
       val servFlag = if(servType == "D") "D" else if(servType == "C") "C"  else if(servType == "P") "P"  else "-1"
       val domain = if(null == x(2)) "-1" else x(2).toString
       val netType = if(null == x(3)) "-1" else x(3).toString
-      val netFlag = if(netType=="3g") "3" else if(netType=="4g") "4" else if(netType=="vpdn") "v" else "t"
-      val reqCnt = x(4).toString
-      val reqSuccCnt = x(5).toString
-      val reqCardCnt = x(6).toString
-      val reqCardSuccCnt = x(7).toString
-      val reqCardFailedCnt = x(8).toString
-
+      val netFlag = if(netType=="3g") "3" else if(netType=="4g") "4"  else "t"
+      val upflow = if(null == x(4)) "0" else  x(4).toString
+      val downflow = if(null == x(5)) "0" else  x(5).toString
+      val avgupflow = if(null == x(6)) "0" else  x(6).toString
+      val avgdownflow = if(null == x(7)) "0" else  x(7).toString
 
       val curAlarmRowkey = progRunType + "_" + dataTime.substring(8,12) + "_" + companyCode + "_" + servType + "_" + domain
       val curAlarmPut = new Put(Bytes.toBytes(curAlarmRowkey))
-      curAlarmPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_c_" + netFlag + "_rn"), Bytes.toBytes(reqCnt))
-      curAlarmPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_c_" + netFlag + "_sn"), Bytes.toBytes(reqSuccCnt))
-      curAlarmPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_c_" + netFlag + "_rat"), Bytes.toBytes(MathUtil.divOpera(reqSuccCnt, reqCnt)))
-      curAlarmPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_c_" + netFlag + "_rcn"), Bytes.toBytes(reqCardCnt))
-      curAlarmPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_c_" + netFlag + "_scn"), Bytes.toBytes(reqCardSuccCnt))
-      curAlarmPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_c_" + netFlag + "_fcn"), Bytes.toBytes(reqCardFailedCnt))
+      curAlarmPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_u"), Bytes.toBytes(upflow))
+      curAlarmPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_d"), Bytes.toBytes(downflow))
+      curAlarmPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_upc"), Bytes.toBytes(avgupflow))
+      curAlarmPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_dpc"), Bytes.toBytes(avgdownflow))
 
       val nextAlarmRowkey = progRunType + "_" + nextDataTime.substring(8,12) + "_" + companyCode + "_" + servType + "_" + domain
       val nexAlarmtPut = new Put(Bytes.toBytes(nextAlarmRowkey))
-      nexAlarmtPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_p_" + netFlag + "_rn"), Bytes.toBytes(reqCnt))
-      nexAlarmtPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_p_" + netFlag + "_sn"), Bytes.toBytes(reqSuccCnt))
-      nexAlarmtPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_p_" + netFlag + "_rat"), Bytes.toBytes(MathUtil.divOpera(reqSuccCnt, reqCnt)))
-      nexAlarmtPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_p_" + netFlag + "_rcn"), Bytes.toBytes(reqCardCnt))
-      nexAlarmtPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_p_" + netFlag + "_scn"), Bytes.toBytes(reqCardSuccCnt))
-      nexAlarmtPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_p_" + netFlag + "_fcn"), Bytes.toBytes(reqCardFailedCnt))
+      nexAlarmtPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_p_" + netFlag + "_u"), Bytes.toBytes(upflow))
+      nexAlarmtPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_p_" + netFlag + "_d"), Bytes.toBytes(downflow))
+      nexAlarmtPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_p_" + netFlag + "_upc"), Bytes.toBytes(avgupflow))
+      nexAlarmtPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_p_" + netFlag + "_dpc"), Bytes.toBytes(avgdownflow))
 
       val curResKey = companyCode +"_" + servType + "_" + domain + "_" + dataTime.substring(8,12)
       val curResPut = new Put(Bytes.toBytes(curResKey))
-      curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_c_" + netFlag + "_rn"), Bytes.toBytes(reqCnt))
-      curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_c_" + netFlag + "_sn"), Bytes.toBytes(reqSuccCnt))
-      curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_c_" + netFlag + "_rat"), Bytes.toBytes(MathUtil.divOpera(reqSuccCnt, reqCnt)))
-      curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_c_" + netFlag + "_rcn"), Bytes.toBytes(reqCardCnt))
-      curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_c_" + netFlag + "_scn"), Bytes.toBytes(reqCardSuccCnt))
-      curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_c_" + netFlag + "_fcn"), Bytes.toBytes(reqCardFailedCnt))
+      curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_u"), Bytes.toBytes(upflow))
+      curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_d"), Bytes.toBytes(downflow))
+      curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_upc"), Bytes.toBytes(avgupflow))
+      curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_dpc"), Bytes.toBytes(avgdownflow))
 
       val nextResKey = companyCode +"_" + servType + "_" + domain + "_" + nextDataTime.substring(8,12)
       val nextResPut = new Put(Bytes.toBytes(nextResKey))
-      nextResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_p_" + netFlag + "_rn"), Bytes.toBytes(reqCnt))
-      nextResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_p_" + netFlag + "_sn"), Bytes.toBytes(reqSuccCnt))
-      nextResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_p_" + netFlag + "_rat"), Bytes.toBytes(MathUtil.divOpera(reqSuccCnt, reqCnt)))
-      nextResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_p_" + netFlag + "_rcn"), Bytes.toBytes(reqCardCnt))
-      nextResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_p_" + netFlag + "_scn"), Bytes.toBytes(reqCardSuccCnt))
-      nextResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_p_" + netFlag + "_fcn"), Bytes.toBytes(reqCardFailedCnt))
+      nextResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_p_" + netFlag + "_u"), Bytes.toBytes(upflow))
+      nextResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_p_" + netFlag + "_d"), Bytes.toBytes(downflow))
+      nextResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_p_" + netFlag + "_upc"), Bytes.toBytes(avgupflow))
+      nextResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_p_" + netFlag + "_dpc"), Bytes.toBytes(avgdownflow))
 
       val dayResKey = dataTime.substring(2,8) + "_" + companyCode + "_" + servType + "_" + domain
       val dayResPut = new Put(Bytes.toBytes(dayResKey))
-      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_c_" + netFlag + "_rn"), Bytes.toBytes(reqCnt))
-      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_c_" + netFlag + "_sn"), Bytes.toBytes(reqSuccCnt))
-      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_c_" + netFlag + "_rat"), Bytes.toBytes(MathUtil.divOpera(reqSuccCnt, reqCnt)))
-      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_c_" + netFlag + "_rcn"), Bytes.toBytes(reqCardCnt))
-      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_c_" + netFlag + "_scn"), Bytes.toBytes(reqCardSuccCnt))
-      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_c_" + netFlag + "_fcn"), Bytes.toBytes(reqCardFailedCnt))
+      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_u"), Bytes.toBytes(upflow))
+      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_d"), Bytes.toBytes(downflow))
+      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_upc"), Bytes.toBytes(avgupflow))
+      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_dpc"), Bytes.toBytes(avgdownflow))
 
       ((new ImmutableBytesWritable, curAlarmPut), (new ImmutableBytesWritable, nexAlarmtPut), (new ImmutableBytesWritable, curResPut), (new ImmutableBytesWritable, nextResPut), (new ImmutableBytesWritable, dayResPut))
     })
@@ -299,42 +289,11 @@ object CDRRealtimeAnalysis extends Logging{
 
 
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////
-    //   失败原因写入
-    //
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    val failedSQL =
-      s"""
-         |select companycode, servtype, mdndomain, type, auth_result as errcode,
-         |count(*) errCnt,
-         |GROUPING__ID
-         |from ${mdnTable} t where t.result = 'f'
-         |group by companycode, servtype, mdndomain, type, auth_result
-         |GROUPING SETS ((companycode,auth_result),(companycode, type,auth_result),(companycode, servtype,auth_result),(companycode, servtype, mdndomain,auth_result), (companycode, servtype, type,auth_result), (companycode, servtype, mdndomain, type,auth_result))
-         |ORDER BY GROUPING__ID
-       """.stripMargin
-
-    val failedDF = sqlContext.sql(failedSQL).filter("mdndomain is null or mdndomain!='-1'").coalesce(1)
-    val failedRDD = failedDF.rdd.map(x=>{
-      val companyCode = x(0).toString
-      val servType = if(null == x(1)) "-1" else x(1).toString
-      val servFlag = if(servType == "D") "D" else if(servType == "C") "C"  else if(servType == "P") "P"  else "-1"
-      val domain = if(null == x(2)) "-1" else x(2).toString
-      val netType = if(null == x(3)) "-1" else x(3).toString
-      val netFlag = if(netType=="3g") "3" else if(netType=="4g") "4" else if(netType=="vpdn") "v" else "t"
-      val errcode = if(null == x(4)) "-1" else x(4).toString
-      val errCnt = x(5).toString
-      val curResKey = companyCode +"_" + servType + "_" + domain + "_" + dataTime.substring(8,12)
-      val curResPut = new Put(Bytes.toBytes(curResKey))
-      curResPut.addColumn(Bytes.toBytes("e"), Bytes.toBytes("a_" + netFlag + "_" + errcode + "_cnt"), Bytes.toBytes(errCnt))
-      (new ImmutableBytesWritable, curResPut)
-    })
-    HbaseDataUtil.saveRddToHbase(curResultHtable, failedRDD)
 
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // 统计累积的认证用户数
+    // 统计累积的流量
     //  对于每日00:00分的数据需要特殊处理， 在hbase里面00:00分的数据存储的是前一日23:55分至当日00:00分的数据
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
     val preDataTime = DateUtils.timeCalcWithFormatConvertSafe(dataTime, "yyyyMMddHHmm", -5*60, "yyyyMMddHHmm")
@@ -348,37 +307,27 @@ object CDRRealtimeAnalysis extends Logging{
     } else{
       resultDF = resultDF.filter("time<='" + dataTime.substring(8,12) + "'" )
     }
-    val accumDF = resultDF.groupBy("compnyAndSerAndDomain").agg(sum("a_c_3_rn").as("req_3g_sum"), sum("a_c_3_sn").as("req_3g_succ_sum"),
-      sum("a_c_4_rn").as("req_4g_sum"),sum("a_c_4_sn").as("req_4g_succ_sum"),
-      sum("a_c_v_rn").as("req_vpdn_sum"),sum("a_c_v_sn").as("req_vpdn_succ_sum"),
-      sum("a_c_t_rn").as("req_total_sum"),sum("a_c_t_sn").as("req_total_succ_sum"))
+    val accumDF = resultDF.groupBy("compnyAndSerAndDomain").agg(sum("f_c_3_u").as("f_c_3_u"), sum("f_c_3_d").as("f_c_3_d"),
+      sum("f_c_4_u").as("f_c_4_u"),sum("f_c_4_d").as("f_c_4_d"),
+      sum("f_c_t_u").as("f_c_t_u"),sum("f_c_t_d").as("f_c_t_d"))
 
     val accumRDD = accumDF.coalesce(1).rdd.map(x=>{
       val rkey = preDataTime.substring(2, 8) + "_" + x(0).toString
       val dayResPut = new Put(Bytes.toBytes(rkey))
-      val req_3g_sum = x(1).toString
-      val req_succ_3g_sum  = x(2).toString
-      val req_4g_sum = x(3).toString
-      val req_succ_4g_sum = x(4).toString
-      val req_vpdn_sum = x(5).toString
-      val req_succ_vpdn_sum = x(6).toString
-      val req_total_sum = x(7).toString
-      val req_succ_total_sum = x(8).toString
-      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_d_3_rn"), Bytes.toBytes(req_3g_sum))
-      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_d_3_sn"), Bytes.toBytes(req_succ_3g_sum))
-      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_d_3_rat"), Bytes.toBytes(MathUtil.divOpera(req_succ_3g_sum, req_3g_sum )))
+      val f_c_3_u = x(1).toString
+      val f_c_3_d  = x(2).toString
+      val f_c_4_u = x(3).toString
+      val f_c_4_d = x(4).toString
+      val f_c_t_u = x(5).toString
+      val f_c_t_d = x(6).toString
 
-      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_d_4_rn"), Bytes.toBytes(req_4g_sum))
-      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_d_4_sn"), Bytes.toBytes(req_succ_4g_sum))
-      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_d_4_rat"), Bytes.toBytes(MathUtil.divOpera(req_succ_4g_sum, req_4g_sum )))
+      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_d_3_u"), Bytes.toBytes(f_c_3_u))
+      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_d_3_d"), Bytes.toBytes(f_c_3_d))
+      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_d_4_u"), Bytes.toBytes(f_c_4_u))
 
-      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_d_v_rn"), Bytes.toBytes(req_vpdn_sum))
-      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_d_v_rn"), Bytes.toBytes(req_succ_vpdn_sum))
-      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_d_v_rat"), Bytes.toBytes(MathUtil.divOpera(req_succ_vpdn_sum, req_vpdn_sum )))
-
-      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_d_t_rn"), Bytes.toBytes(req_total_sum))
-      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_d_t_sn"), Bytes.toBytes(req_succ_total_sum))
-      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_d_t_rat"), Bytes.toBytes(MathUtil.divOpera(req_succ_total_sum, req_total_sum )))
+      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_d_4_d"), Bytes.toBytes(f_c_4_d))
+      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_d_t_u"), Bytes.toBytes(f_c_t_u))
+      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_d_t_d"), Bytes.toBytes(f_c_t_d))
 
       (new ImmutableBytesWritable, dayResPut)
     })
@@ -394,41 +343,26 @@ object CDRRealtimeAnalysis extends Logging{
     val hisDF = AuthHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + hisDataTime.substring(0, 8)).filter("time='" + hisDataTime.substring(8, 12) + "'")
 
     if(hisDF != null){
-      val hisResDF = hisDF.select("compnyAndSerAndDomain", "a_c_3_rn", "a_c_3_sn", "a_c_4_rn",
-        "a_c_4_sn", "a_c_v_rn", "a_c_v_sn", "a_c_t_rn", "a_c_t_sn",
-        "a_c_3_rat", "a_c_4_rat", "a_c_v_rat", "a_c_t_rat")
+      val hisResDF = hisDF.select("compnyAndSerAndDomain", "f_c_3_u", "f_c_3_d", "f_c_4_u",
+        "f_c_4_d", "f_c_t_u", "f_c_t_d")
 
      val hisResRDD = hisResDF.rdd.map(x=>{
         val rkey = dataTime.substring(2, 8) + "_" + x(0).toString
-        val req_3g_cnt = x(1).toString
-        val req_succ_3g_cnt = x(2).toString
-        val req_4g_cnt = x(3).toString
-        val req_succ_4g_cnt = x(4).toString
-        val req_vpdn_cnt = x(5).toString
-        val req_succ_vpdn_cnt = x(6).toString
-        val req_total_cnt = x(7).toString
-        val req_succ_total_cnt = x(8).toString
-        val req_3g_ration = x(9).toString
-        val req_4g_ration = x(10).toString
-        val req_vpdn_ration = x(11).toString
-        val req_total_ration = x(12).toString
-
+        val f_c_3_u = x(1).toString
+        val f_c_3_d = x(2).toString
+        val f_c_4_u = x(3).toString
+        val f_c_4_d = x(4).toString
+        val f_c_t_u = x(5).toString
+        val f_c_t_d = x(6).toString
 
         val dayResPut = new Put(Bytes.toBytes(rkey))
-        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_h_3_rn"), Bytes.toBytes(req_3g_cnt))
-        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_h_3_sn"), Bytes.toBytes(req_succ_3g_cnt))
-        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_h_4_rn"), Bytes.toBytes(req_3g_cnt))
-        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_h_4_sn"), Bytes.toBytes(req_succ_3g_cnt))
-        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_h_v_rn"), Bytes.toBytes(req_3g_cnt))
+        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_h_3_u"), Bytes.toBytes(f_c_3_u))
+        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_h_3_d"), Bytes.toBytes(f_c_3_d))
+        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_h_4_u"), Bytes.toBytes(f_c_4_u))
+        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_h_4_d"), Bytes.toBytes(f_c_4_d))
+        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_h_v_u"), Bytes.toBytes(f_c_t_u))
 
-        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_h_v_sn"), Bytes.toBytes(req_succ_3g_cnt))
-        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_h_t_rn"), Bytes.toBytes(req_3g_cnt))
-        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_h_t_sn"), Bytes.toBytes(req_succ_3g_cnt))
-        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_h_3_rat"), Bytes.toBytes(req_3g_ration))
-        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_h_4_rat"), Bytes.toBytes(req_4g_ration))
-
-        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_h_v_rat"), Bytes.toBytes(req_vpdn_ration))
-        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_h_t_rat"), Bytes.toBytes(req_total_ration))
+        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_h_v_d"), Bytes.toBytes(f_c_t_d))
 
         (new ImmutableBytesWritable, dayResPut)
 
@@ -442,7 +376,7 @@ object CDRRealtimeAnalysis extends Logging{
     // 更新时间, 断点时间比数据时间多1分钟
     val updateTime = DateUtils.timeCalcWithFormatConvertSafe(dataTime, "yyyyMMddHHmm", 1*60, "yyyyMMddHHmm")
     val analyzeColumn = if(progRunType == "0") "analyze_guess_bptime" else "analyze_real_bptime"
-    HbaseUtils.upSertColumnByRowkey(analyzeBPHtable, "bp", "auth", analyzeColumn, updateTime)
+    HbaseUtils.upSertColumnByRowkey(analyzeBPHtable, "bp", "cdr", analyzeColumn, updateTime)
 
 
   }

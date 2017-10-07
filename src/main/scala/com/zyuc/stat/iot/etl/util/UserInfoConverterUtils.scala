@@ -42,14 +42,17 @@ object UserInfoConverterUtils extends Logging {
     StructField("belo_prov", StringType),
     StructField("custstatus", StringType),
     StructField("custtype", StringType),
-    StructField("prodtype", StringType)
+    StructField("prodtype", StringType),
+    StructField("internetType", StringType),
+    StructField("vpdnOnly", StringType),
+    StructField("isCommon", StringType)
   ))
 
 
   def parseLine(line: String) = {
 
     try {
-      val p = line.split("\\|", 24)
+      val p = line.split("\\|", 26)
       val apncompanycode = p(7)
       val isDirect = if (apncompanycode.startsWith("D")) "1" else "0"
       val vpdnDomain = p(9)
@@ -61,7 +64,12 @@ object UserInfoConverterUtils extends Logging {
 
       val isVPDN = if (p(10) == "1") "1" else "0"
 
-      Row(p(0), p(1), p(2), p(3), p(4), p(5), p(6), p(7), p(8), p(9), isVPDN, isDirect, p(11), p(12), p(13), p(14), p(15), p(16), p(17), p(18), p(19), p(20), p(21), p(22), p(23))
+      val internetType = p(24)
+      val vpdnOnly = if(internetType.contains("VpdnBlockInternet")) "1" else "0"
+      val isCommon = if(vpdnOnly!="0" && isDirect!="1") "1" else "0"
+
+
+      Row(p(0), p(1), p(2), p(3), p(4), p(5), p(6), p(7), p(8), p(9), isVPDN, isDirect, p(11), p(12), p(13), p(14), p(15), p(16), p(17), p(18), p(19), p(20), p(21), p(22), p(23), internetType, vpdnOnly, isCommon)
     } catch {
       case e: Exception =>
         logError("ParseError log[" + line + "] msg[" + e.getMessage + "]")
@@ -71,10 +79,7 @@ object UserInfoConverterUtils extends Logging {
 
   def main(args: Array[String]): Unit = {
 
-    val d = "D0002"
-    val isDirect = if (d.startsWith("D")) 1 else 0
-    val isVpdn = if (d.startsWith("D")) 1 else 0
-    println(isDirect)
+
     println("test")
   }
 }

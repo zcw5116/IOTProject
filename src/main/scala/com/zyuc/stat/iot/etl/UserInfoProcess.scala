@@ -63,50 +63,50 @@ object UserInfoProcess {
 
     // 用户表， 是否定向业务， 是否vpdn业务
     val userDF = sqlContext.createDataFrame(textDF.map(x => UserInfoConverterUtils.parseLine(x.getString(0))).filter(_.length != 1), UserInfoConverterUtils.struct)
-    userDF.coalesce(7).write.format("orc").mode(SaveMode.Overwrite).save(userOutputPath)
+    userDF.repartition(7).write.format("orc").mode(SaveMode.Overwrite).save(userOutputPath)
     sqlContext.sql(s"alter table $userInfoTable add if not exists partition(d='$dataDayid') ")
 
     // 用户和企业关联表
-    val tmpDF = userDF.select("mdn", "imsicdma", "imsilte", "companycode", "vpdndomain", "isvpdn", "isdirect", "userstatus", "atrbprovince", "userprovince", "belo_city", "belo_prov", "custstatus", "custtype", "prodtype")
+    val tmpDF = userDF.select("mdn", "imsicdma", "imsilte", "companycode", "vpdndomain", "isvpdn", "isdirect", "userstatus", "atrbprovince", "userprovince", "belo_city", "belo_prov", "custstatus", "custtype", "prodtype","internetType","vpdnOnly","isCommon")
     import sqlContext.implicits._
     val userAndDomainAndCompanyDF = tmpDF.rdd.flatMap(line=>{
       val vpdndomain = line(4).toString
       val domainList = vpdndomain.split(",")
-      val domainSet = new mutable.HashSet[Tuple16[String, String, String,String, String, String, String, String, String,String, String, String, String, String, String, String]]
+      val domainSet = new mutable.HashSet[Tuple19[String, String, String,String, String, String, String, String, String,String, String, String, String, String, String, String, String, String, String]]
       domainList.foreach(e=>{
-        val apn = apnMap.get(e).toString
+        val apn = apnMap.get(e).mkString
         domainSet.+=((line(0).toString,line(1).toString,line(2).toString,line(3).toString,e, apn, line(5).toString,line(6).toString,line(7).toString,line(8).toString,
-          line(9).toString,line(10).toString,line(11).toString,line(12).toString,line(13).toString,line(14).toString))
+          line(9).toString,line(10).toString,line(11).toString,line(12).toString,line(13).toString,line(14).toString,line(15).toString,line(16).toString,line(17).toString))
       })
       domainSet
-    }).toDF("mdn", "imsicdma", "imsilte", "companycode", "vpdndomain", "apn", "isvpdn", "isdirect", "userstatus", "atrbprovince", "userprovince", "belo_city", "belo_prov", "custstatus", "custtype", "prodtype")
+    }).toDF("mdn", "imsicdma", "imsilte", "companycode", "vpdndomain", "apn", "isvpdn", "isdirect", "userstatus", "atrbprovince", "userprovince", "belo_city", "belo_prov", "custstatus", "custtype", "prodtype","internetType","vpdnOnly","isCommon")
     userAndDomainAndCompanyDF.coalesce(7).write.format("orc").mode(SaveMode.Overwrite).save(userAndDomainOutputPath)
     sqlContext.sql(s"alter table $userAndDomainTable add if not exists partition(d='$dataDayid') ")
 
 
     // 企业和域名对应关系表
     val tmpCompanyTable = "tmpCompanyTable"
-    userAndDomainAndCompanyDF.select("companycode", "vpdndomain", "belo_city", "belo_prov").distinct().registerTempTable(tmpCompanyTable)
+    userAndDomainAndCompanyDF.select("companycode", "vpdndomain", "belo_prov").distinct().registerTempTable(tmpCompanyTable)
 
     ////////////////////////////////////////////////////////////////////////////////////
     // 对域名使用正则过滤： 1. fsznjt.vpdn.gd,,dl.vpdn.hn 清洗为： fsznjt.vpdn.gd,dl.vpdn.hn
     //                  2. ,bdhbgl.vpdn.he 清洗为： bdhbgl.vpdn.he
     ////////////////////////////////////////////////////////////////////////////////////
     val tmpDomainAndCompanyDF =  sqlContext.sql(
-      s"""select companycode, belo_city, belo_prov, regexp_replace(regexp_replace(vpdndomain,'^,',''),',{2}',',') as vpdndomain
+      s"""select companycode, belo_prov, regexp_replace(regexp_replace(vpdndomain,'^,',''),',{2}',',') as vpdndomain
          |from (
-         |select companycode, belo_city, belo_prov, concat_ws(',',collect_set(vpdndomain)) vpdndomain
+         |select companycode, belo_prov, concat_ws(',',collect_set(vpdndomain)) vpdndomain
          |from ${tmpCompanyTable}
-         |group by companycode, belo_city, belo_prov
+         |group by companycode, belo_prov
          |) m
        """.stripMargin)
 
 
     val tmpProvinceMapcodeDF = sqlContext.read.format("text").load(provinceMapcodeFile)
-    val provinceMapcodeDF = tmpProvinceMapcodeDF.map(x=>x.getString(0).split("\t",5)).map(x=>(x(0),x(1),x(2),x(3))).toDF("provincecode", "provincename", "citycode", "cityname")
+    val provinceMapcodeDF = tmpProvinceMapcodeDF.map(x=>x.getString(0).split("\t",5)).map(x=>(x(0),x(1))).distinct().toDF("provincecode", "provincename")
     val DomainAndCompanyDF = tmpDomainAndCompanyDF.join(provinceMapcodeDF,
-      tmpDomainAndCompanyDF.col("belo_prov")===provinceMapcodeDF.col("provincecode") && tmpDomainAndCompanyDF.col("belo_city")===provinceMapcodeDF.col("citycode")).
-    select("companycode", "vpdndomain","provincecode","citycode","provincename","cityname")
+      tmpDomainAndCompanyDF.col("belo_prov")===provinceMapcodeDF.col("provincecode")).
+    select("companycode", "vpdndomain","provincecode","provincename")
     DomainAndCompanyDF.coalesce(1).write.format("orc").mode(SaveMode.Overwrite).save(companyAndDomainOutputPath)
     sqlContext.sql(s"alter table $companyAndDomainTable add if not exists partition(d='$dataDayid') ")
 

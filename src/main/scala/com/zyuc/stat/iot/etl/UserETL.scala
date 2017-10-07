@@ -11,6 +11,7 @@ import scala.collection.mutable
 
 /**
   * Created by zhoucw on 17-9-20.
+  * @deprecated
   */
 object UserETL {
   def main(args: Array[String]): Unit = {

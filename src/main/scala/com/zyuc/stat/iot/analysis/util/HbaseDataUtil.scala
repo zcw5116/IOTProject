@@ -1,7 +1,6 @@
 package com.zyuc.stat.iot.analysis.util
 
 import com.zyuc.stat.properties.ConfigProperties
-import com.zyuc.stat.utils.HbaseUtils
 import org.apache.hadoop.hbase.HBaseConfiguration
 import org.apache.hadoop.hbase.client.{ConnectionFactory, Put}
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable
