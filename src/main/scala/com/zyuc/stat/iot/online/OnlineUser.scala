@@ -232,7 +232,7 @@ object OnlineUser extends Logging {
          |(case when terminatecause='UserRequest' then 'succ' else 'failed' end ) as result
          |from pgwradius_out where dayid='${dayid}' and time>='${startTime}'  and time<'${endTime}'
          |union all
-         |select mdn, status, nettype, terminatecause
+         |select mdn, status, nettype, terminatecause,
          |(case when terminatecause in('2','7','8','9','11','12','13','14','15') then 'succ' else 'failed' end ) as result
          |from iot_radius_ha where dayid='${dayid}' and time>='${startTime}'  and time<'${endTime}'
        """.stripMargin).coalesce(1)

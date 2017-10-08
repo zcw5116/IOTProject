@@ -55,17 +55,21 @@ object AuthHtableConverter extends Logging {
     StructField("a_c_t_rat", StringType),        // req_total_ration
     StructField("f_c_3_u", StringType),
     StructField("f_c_3_d", StringType),
+    StructField("f_c_3_t", StringType),
     StructField("f_c_4_u", StringType),
-    StructField("f_c_4_d", StringType),
 
+    StructField("f_c_4_d", StringType),
+    StructField("f_c_4_t", StringType),
     StructField("f_c_t_u", StringType),
     StructField("f_c_t_d", StringType),
+    StructField("f_c_t_t", StringType),
+
     StructField("ma_c_4_rn", StringType),
     StructField("ma_c_4_sn", StringType),
     StructField("ma_c_4_rcn", StringType),
-
     StructField("ma_c_4_scn", StringType),
     StructField("ma_c_4_fcn", StringType),
+
     StructField("ma_c_4_rat", StringType)
   ))
 
@@ -111,17 +115,21 @@ object AuthHtableConverter extends Logging {
       val a_c_t_rat = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("a_c_t_rat")))
       val f_c_3_u = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("f_c_3_d")))
       val f_c_3_d = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("f_c_3_d")))
-      val f_c_4_u = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("f_c_3_d")))
-      val f_c_4_d = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("f_c_3_d")))
+      val f_c_3_t = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("f_c_3_t")))
+      val f_c_4_u = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("f_c_4_u")))
 
-      val f_c_t_u = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("f_c_3_d")))
-      val f_c_t_d = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("f_c_3_d")))
+      val f_c_4_d = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("f_c_4_d")))
+      val f_c_4_t = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("f_c_4_t")))
+      val f_c_t_u = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("f_c_t_u")))
+      val f_c_t_d = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("f_c_t_d")))
+      val f_c_t_t = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("f_c_t_t")))
+
       val ma_c_4_rn = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("ma_c_4_rn")))
       val ma_c_4_sn = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("ma_c_4_sn")))
       val ma_c_4_rcn = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("ma_c_4_rcn")))
-
       val ma_c_4_scn = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("ma_c_4_scn")))
       val ma_c_4_fcn = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("ma_c_4_fcn")))
+
       val ma_c_4_rat = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("ma_c_4_rat")))
 
 
@@ -160,17 +168,21 @@ object AuthHtableConverter extends Logging {
         if(null==a_c_t_rat) "0" else a_c_t_rat,
         if(null==f_c_3_u) "0" else f_c_3_u,
         if(null==f_c_3_d) "0" else f_c_3_d,
+        if(null==f_c_3_t) "0" else f_c_3_t,
         if(null==f_c_4_u) "0" else f_c_4_u,
-        if(null==f_c_4_d) "0" else f_c_4_d,
 
+        if(null==f_c_4_d) "0" else f_c_4_d,
+        if(null==f_c_4_t) "0" else f_c_4_t,
         if(null==f_c_t_u) "0" else f_c_t_u,
         if(null==f_c_t_d) "0" else f_c_t_d,
+        if(null==f_c_t_t) "0" else f_c_t_t,
+
         if(null==ma_c_4_rn) "0" else ma_c_4_rn,
         if(null==ma_c_4_sn) "0" else ma_c_4_sn,
         if(null==ma_c_4_rcn) "0" else ma_c_4_rcn,
-
         if(null==ma_c_4_scn) "0" else ma_c_4_scn,
         if(null==ma_c_4_fcn) "0" else ma_c_4_fcn,
+
         if(null==ma_c_4_rat) "0" else ma_c_4_rat
       )
 

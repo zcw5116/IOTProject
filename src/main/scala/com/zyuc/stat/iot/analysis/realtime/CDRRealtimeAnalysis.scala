@@ -6,7 +6,7 @@ import com.zyuc.stat.utils.{DateUtils, HbaseUtils, MathUtil}
 import org.apache.hadoop.hbase.client.Put
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable
 import org.apache.hadoop.hbase.util.Bytes
-import org.apache.spark.sql.functions._
+import org.apache.spark.sql.functions.{sum, _}
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{Logging, SparkConf, SparkContext}
 
@@ -239,43 +239,55 @@ object CDRRealtimeAnalysis extends Logging{
       val netFlag = if(netType=="3g") "3" else if(netType=="4g") "4"  else "t"
       val upflow = if(null == x(4)) "0" else  x(4).toString
       val downflow = if(null == x(5)) "0" else  x(5).toString
+      val totalflow = (upflow.toDouble + downflow.toDouble).toString
       val avgupflow = if(null == x(6)) "0" else  x(6).toString
       val avgdownflow = if(null == x(7)) "0" else  x(7).toString
+      val totalavgflow = (avgupflow.toDouble + avgdownflow.toDouble).toString
 
       val curAlarmRowkey = progRunType + "_" + dataTime.substring(8,12) + "_" + companyCode + "_" + servType + "_" + domain
       val curAlarmPut = new Put(Bytes.toBytes(curAlarmRowkey))
       curAlarmPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_u"), Bytes.toBytes(upflow))
       curAlarmPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_d"), Bytes.toBytes(downflow))
+      curAlarmPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_t"), Bytes.toBytes(totalflow))
       curAlarmPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_upc"), Bytes.toBytes(avgupflow))
       curAlarmPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_dpc"), Bytes.toBytes(avgdownflow))
+      curAlarmPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_tpc"), Bytes.toBytes(totalavgflow))
 
       val nextAlarmRowkey = progRunType + "_" + nextDataTime.substring(8,12) + "_" + companyCode + "_" + servType + "_" + domain
       val nexAlarmtPut = new Put(Bytes.toBytes(nextAlarmRowkey))
       nexAlarmtPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_p_" + netFlag + "_u"), Bytes.toBytes(upflow))
       nexAlarmtPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_p_" + netFlag + "_d"), Bytes.toBytes(downflow))
+      nexAlarmtPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_p_" + netFlag + "_t"), Bytes.toBytes(totalflow))
       nexAlarmtPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_p_" + netFlag + "_upc"), Bytes.toBytes(avgupflow))
       nexAlarmtPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_p_" + netFlag + "_dpc"), Bytes.toBytes(avgdownflow))
+      nexAlarmtPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_p_" + netFlag + "_tpc"), Bytes.toBytes(totalavgflow))
 
       val curResKey = companyCode +"_" + servType + "_" + domain + "_" + dataTime.substring(8,12)
       val curResPut = new Put(Bytes.toBytes(curResKey))
       curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_u"), Bytes.toBytes(upflow))
       curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_d"), Bytes.toBytes(downflow))
+      curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_t"), Bytes.toBytes(totalflow))
       curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_upc"), Bytes.toBytes(avgupflow))
       curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_dpc"), Bytes.toBytes(avgdownflow))
+      curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_tpc"), Bytes.toBytes(totalavgflow))
 
       val nextResKey = companyCode +"_" + servType + "_" + domain + "_" + nextDataTime.substring(8,12)
       val nextResPut = new Put(Bytes.toBytes(nextResKey))
       nextResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_p_" + netFlag + "_u"), Bytes.toBytes(upflow))
       nextResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_p_" + netFlag + "_d"), Bytes.toBytes(downflow))
+      nextResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_p_" + netFlag + "_t"), Bytes.toBytes(totalflow))
       nextResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_p_" + netFlag + "_upc"), Bytes.toBytes(avgupflow))
       nextResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_p_" + netFlag + "_dpc"), Bytes.toBytes(avgdownflow))
+      nextResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_p_" + netFlag + "_tpc"), Bytes.toBytes(totalavgflow))
 
       val dayResKey = dataTime.substring(2,8) + "_" + companyCode + "_" + servType + "_" + domain
       val dayResPut = new Put(Bytes.toBytes(dayResKey))
       dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_u"), Bytes.toBytes(upflow))
       dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_d"), Bytes.toBytes(downflow))
+      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_t"), Bytes.toBytes(totalflow))
       dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_upc"), Bytes.toBytes(avgupflow))
       dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_dpc"), Bytes.toBytes(avgdownflow))
+      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_tpc"), Bytes.toBytes(totalavgflow))
 
       ((new ImmutableBytesWritable, curAlarmPut), (new ImmutableBytesWritable, nexAlarmtPut), (new ImmutableBytesWritable, curResPut), (new ImmutableBytesWritable, nextResPut), (new ImmutableBytesWritable, dayResPut))
     })
@@ -309,7 +321,8 @@ object CDRRealtimeAnalysis extends Logging{
     }
     val accumDF = resultDF.groupBy("compnyAndSerAndDomain").agg(sum("f_c_3_u").as("f_c_3_u"), sum("f_c_3_d").as("f_c_3_d"),
       sum("f_c_4_u").as("f_c_4_u"),sum("f_c_4_d").as("f_c_4_d"),
-      sum("f_c_t_u").as("f_c_t_u"),sum("f_c_t_d").as("f_c_t_d"))
+      sum("f_c_t_u").as("f_c_t_u"),sum("f_c_t_d").as("f_c_t_d"),
+      sum("f_c_3_t").as("f_c_3_t"), sum("f_c_4_t").as("f_c_4_t"), sum("f_c_t_t").as("f_c_t_t"))
 
     val accumRDD = accumDF.coalesce(1).rdd.map(x=>{
       val rkey = preDataTime.substring(2, 8) + "_" + x(0).toString
@@ -320,14 +333,20 @@ object CDRRealtimeAnalysis extends Logging{
       val f_c_4_d = x(4).toString
       val f_c_t_u = x(5).toString
       val f_c_t_d = x(6).toString
+      val f_c_3_t = x(7).toString
+      val f_c_4_t = x(8).toString
+      val f_c_t_t = x(9).toString
 
       dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_d_3_u"), Bytes.toBytes(f_c_3_u))
       dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_d_3_d"), Bytes.toBytes(f_c_3_d))
+      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_d_3_t"), Bytes.toBytes(f_c_3_t))
       dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_d_4_u"), Bytes.toBytes(f_c_4_u))
 
       dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_d_4_d"), Bytes.toBytes(f_c_4_d))
+      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_d_4_t"), Bytes.toBytes(f_c_4_t))
       dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_d_t_u"), Bytes.toBytes(f_c_t_u))
       dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_d_t_d"), Bytes.toBytes(f_c_t_d))
+      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_d_t_t"), Bytes.toBytes(f_c_t_t))
 
       (new ImmutableBytesWritable, dayResPut)
     })
@@ -344,7 +363,7 @@ object CDRRealtimeAnalysis extends Logging{
 
     if(hisDF != null){
       val hisResDF = hisDF.select("compnyAndSerAndDomain", "f_c_3_u", "f_c_3_d", "f_c_4_u",
-        "f_c_4_d", "f_c_t_u", "f_c_t_d")
+        "f_c_4_d", "f_c_t_u", "f_c_t_d", "f_c_3_t", "f_c_4_t", "f_c_t_t")
 
      val hisResRDD = hisResDF.rdd.map(x=>{
         val rkey = dataTime.substring(2, 8) + "_" + x(0).toString
@@ -354,15 +373,21 @@ object CDRRealtimeAnalysis extends Logging{
         val f_c_4_d = x(4).toString
         val f_c_t_u = x(5).toString
         val f_c_t_d = x(6).toString
+        val f_c_3_t = x(7).toString
+        val f_c_4_t = x(8).toString
+       val f_c_t_t = x(9).toString
 
         val dayResPut = new Put(Bytes.toBytes(rkey))
         dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_h_3_u"), Bytes.toBytes(f_c_3_u))
         dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_h_3_d"), Bytes.toBytes(f_c_3_d))
         dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_h_4_u"), Bytes.toBytes(f_c_4_u))
         dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_h_4_d"), Bytes.toBytes(f_c_4_d))
-        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_h_v_u"), Bytes.toBytes(f_c_t_u))
+        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_h_t_u"), Bytes.toBytes(f_c_t_u))
 
-        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_h_v_d"), Bytes.toBytes(f_c_t_d))
+        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_h_t_d"), Bytes.toBytes(f_c_t_d))
+       dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_h_3_t"), Bytes.toBytes(f_c_t_d))
+       dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_h_4_t"), Bytes.toBytes(f_c_t_d))
+       dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_h_u_t"), Bytes.toBytes(f_c_t_d))
 
         (new ImmutableBytesWritable, dayResPut)
 
