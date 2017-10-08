@@ -17,6 +17,7 @@ import scala.collection.mutable
   * Created by zhoucw on 17-7-9.
   * Desc: 1. 3G在线规则：取话单截断时间在统计时间点至前7个小时区间，状态为非结束状态，排除掉这个区间中话单中状态存在结束状态的account_session
           2. 4G 在线规则： 取话单结束时间在统计时间点至后两个小时区间， 话单开始时间在统计时间点之前的用户
+  *@deprecated
   */
 object UserOnlineBaseData extends Logging{
 
