@@ -1,7 +1,7 @@
 package com.zyuc.stat.iot.multiana
 
 import com.zyuc.stat.properties.ConfigProperties
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, SaveMode}
 import org.apache.spark.sql.functions.{count, lit}
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{SparkConf, SparkContext}
@@ -41,7 +41,7 @@ object KaAnalysis {
               cacheUserdDF.join(resultDF_4G, Seq("custprovince", "vpdncompanycode"), "left").join(resultDF_3G, Seq("custprovince", "vpdncompanycode"), "left").
                 select(cacheUserdDF("custprovince"), cacheUserdDF("vpdncompanycode"), resultDF_4G("activenum_4g").eqNullSafe(0), resultDF_3G("activenum_3g").eqNullSafe(0))
               // 将结果写入json文件中
-              //resultDF_user.write.mode(SaveMode.Overwrite).format("json").save(outputPath)
+              resultDF_user.write.mode(SaveMode.Overwrite).format("json").save(outputPath)
           }
       }else{
 

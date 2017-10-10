@@ -16,7 +16,7 @@ object CDRConverterUtils extends Logging{
     var newDF:DataFrame = null
     try{
       if(authLogType==LOG_TYPE_PDSN){
-        newDF = df.selectExpr("MDN  as  mdn_2","T0  as  streamnumber","T1  as  acct_status_type",
+        newDF = df.selectExpr("a  as  mdn_2","T0  as  streamnumber","T1  as  acct_status_type",
           "T10  as  source_ipv6_prefix","T11  as  ipv6_interface_id","T12  as  account_session_id",
           "T13  as  correlation_id","T14  as  session_continue","T15  as  beginning_session",
           "T16  as  service_reference_id","T17  as  flow_id_parameter","T18  as  home_agent",
@@ -70,6 +70,7 @@ object CDRConverterUtils extends Logging{
         newDF = newDF.filter(newDF("l_timeoflastusage").isNotNull)
       }
       else if(authLogType==LOG_TYPE_HACCG){
+
       }
     }catch {
       case e:Exception =>{

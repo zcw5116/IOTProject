@@ -10,7 +10,8 @@ import java.util.concurrent.Executors
 import com.alibaba.fastjson.JSON
 import com.sun.net.httpserver.{Headers, HttpExchange, HttpHandler, HttpServer}
 import com.zyuc.stat.iot.etl.CDRETL.doJob
-import com.zyuc.stat.iot.etl.{CDRETL, MMELogETL}
+import com.zyuc.stat.iot.etl.{CDRETL, MMELogETL, SMSCETL}
+import com.zyuc.stat.iot.smsc.SMSCAnalysis
 import com.zyuc.stat.properties.ConfigProperties
 import org.apache.hadoop.fs.FileSystem
 import org.apache.spark.sql.SQLContext
@@ -55,10 +56,10 @@ object ConvertServer {
         var serverInfo = ""
         // 调用SparkSQL的方法进行测试
         try {
-          if(serverLine == "test"){
+          if (serverLine == "test") {
             sqlContext.read.format("json").load("/hadoop/zcw/tmp/zips.json").show
           }
-          else if(serverLine == "mmeETL"){
+          else if (serverLine == "mmeETL") {
             val appName = Params.getString("appName")
             val loadTime = Params.getString("loadTime")
             val inputPath = Params.getString("inputPath")
@@ -68,8 +69,8 @@ object ConvertServer {
             val ztmmWildcard = Params.getString("ztmmWildcard")
             val ztsmWildcard = Params.getString("ztsmWildcard")
             serverInfo = "未知异常"
-            serverInfo = MMELogETL.doJob(sqlContext,fileSystem, appName, loadTime, inputPath, outputPath, hwmmWildcard, hwsmWildcard, ztmmWildcard, ztsmWildcard)
-          }else if(serverLine == "cdrETL"){
+            serverInfo = MMELogETL.doJob(sqlContext, fileSystem, appName, loadTime, inputPath, outputPath, hwmmWildcard, hwsmWildcard, ztmmWildcard, ztsmWildcard)
+          } else if (serverLine == "cdrETL") {
             val appName = Params.getString("appName")
             val loadTime = Params.getString("loadTime")
             val inputPath = Params.getString("inputPath")
@@ -80,12 +81,21 @@ object ConvertServer {
             val logTableName = Params.getString("logTableName")
             serverInfo = "未知异常"
             serverInfo = CDRETL.doJob(sqlContext, fileSystem, appName, loadTime, inputPath, outputPath, fileWildcard, coalesceSize.toInt, logType, logTableName)
-          }
-          else{
+          } else if (serverLine == "smssETL") {
+            val appName = Params.getString("appName")
+            val loadTime = Params.getString("loadTime")
+            val inputPath = Params.getString("inputPath")
+            val fileWildcard = Params.getString("fileWildcard")
+            val outputPath = Params.getString("outputPath")
+            val coalesceSize = Params.getString("coalesceSize")
+            val logType = Params.getString("logType")
+            val logTableName = Params.getString("logTableName")
+            serverInfo = "未知异常"
+            SMSCETL.doJob(sqlContext, fileSystem, appName, loadTime, inputPath, outputPath, fileWildcard, coalesceSize.toInt, logType, logTableName)
+          } else {
             System.out.println("go")
           }
-
-        } catch {
+        }catch {
           case e: Exception =>
             e.printStackTrace()
             response = "失败"

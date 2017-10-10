@@ -12,6 +12,7 @@ import org.apache.spark.sql.functions.broadcast
 
 /**
   * Created by zhoucw on 17-7-27.
+  * @deprecated
   */
 case class VPDNProv(custProvince:String, vpdncompanycode:String)
 

@@ -17,6 +17,7 @@ import scala.collection.mutable
   * Created by zhoucw on 17-7-9.
   * Desc: 1. 3G在线规则：取话单截断时间在统计时间点至前7个小时区间，状态为非结束状态，排除掉这个区间中话单中状态存在结束状态的account_session
           2. 4G 在线规则： 取话单结束时间在统计时间点至后两个小时区间， 话单开始时间在统计时间点之前的用户
+  *@deprecated
   */
 object UserOnlineBaseData extends Logging{
 
@@ -76,7 +77,7 @@ object UserOnlineBaseData extends Logging{
            |union all
            |select t.mdn, t.account_session_id, t.acct_status_type
            |from ${pdsnTable} t
-           |where t.d='${dayidOfCurHourtime}' and t.h<='${curHourid}'
+           |where t.d='${dayidOfCurHourtime}' and t.h<'${curHourid}'
          """.stripMargin
     }else{
       commonSql =
@@ -84,7 +85,7 @@ object UserOnlineBaseData extends Logging{
            |select t.mdn, t.account_session_id, t.acct_status_type
            |from ${pdsnTable} t
            |where t.d='${dayidOflast7Hourtime}'
-           |      and t.h>='${last7Hourid}' and t.h<='${curHourid}'
+           |      and t.h>='${last7Hourid}' and t.h<'${curHourid}'
            |""".stripMargin
     }
 
@@ -120,8 +121,15 @@ object UserOnlineBaseData extends Logging{
     val g3onlinecomptable = "g3onlinecomp" + curHourtime
 
     val g3onlinecompsql =
-      s"""CACHE TABLE ${g3onlinecomptable} as select u.vpdncompanycode,count(*) as g3cnt from ${g3tmpuser} t, ${cachedUserinfoTable} u
-         |  where t.mdn=u.mdn group by u.vpdncompanycode
+      s"""CACHE TABLE ${g3onlinecomptable} as select r.vpdncompanycode,count(*) as g3cnt
+         |from (
+         |select u.vpdncompanycode, u.mdn
+         |from ${cachedUserinfoTable} u
+         |left semi join
+         |${g3tmpuser} t
+         |on(t.mdn=u.mdn)
+         |) r
+         |group by r.vpdncompanycode
        """.stripMargin
     sqlContext.sql(g3onlinecompsql).coalesce(1)
 
@@ -171,7 +179,7 @@ object UserOnlineBaseData extends Logging{
 
     // 暂时将g3置为0
     val companyonlinesum =
-      s"""select '${curPartDayrid}' as d, '${curHourid}' as h, c.custprovince, c.vpdncompanycode, 0 as g3cnt, nvl(t2.pgwcnt,0) as pgwcnt
+      s"""select '${curPartDayrid}' as d, '${curHourid}' as h, c.custprovince, c.vpdncompanycode, nvl(t1.g3cnt,0) as g3cnt, nvl(t2.pgwcnt,0) as pgwcnt
          |from ${cachedCompanyTable} c
          |left join ${g3onlinecomptable} t1 on(c.vpdncompanycode=t1.vpdncompanycode)
          |left join ${pgwonlinecomptable} t2 on(c.vpdncompanycode=t2.vpdncompanycode)

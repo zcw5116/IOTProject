@@ -15,4 +15,8 @@ object MathUtil {
       }
     }
   }
+
+  def main(args: Array[String]): Unit = {
+    println(divOpera("3","4"))
+  }
 }

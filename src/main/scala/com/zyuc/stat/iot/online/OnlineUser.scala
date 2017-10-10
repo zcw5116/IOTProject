@@ -34,16 +34,24 @@ object OnlineUser extends Logging {
     sqlContext.sql("use " + ConfigProperties.IOT_HIVE_DATABASE)
     val onlineType = sc.getConf.get("spark.app.onlineType") //"sum, detail"
     val m5timeid = sc.getConf.get("spark.app.m5timeid")
+    val ifUpdatelarmFlag = sc.getConf.get("spark.app.ifUpdatelarmFlag","1")
 
     if(onlineType!="sum" && onlineType!="detail") {
       logError("onlineType para error, expected: sum, detail")
       return
     }
 
+    var ifUpdatealarmChk = true
+    if(ifUpdatelarmFlag=="0"){
+      ifUpdatealarmChk = false
+    } else {
+      ifUpdatealarmChk = true
+    }
+
     if(onlineType == "sum"){
       val baseHourid = HbaseUtils.getCloumnValueByRowkey("iot_dynamic_info","rowkey001","onlinebase","baseHourid") // 从habase里面获取
       // doOnlineDetail(sqlContext, m5timeid)
-      doCalcOnlineNums(sc, sqlContext, m5timeid, baseHourid)
+      doCalcOnlineNums(sc, sqlContext, m5timeid, baseHourid, ifUpdatealarmChk)
     } else if(onlineType == "detail") {
       val userTable = sc.getConf.get("spark.app.userTable") //"iot_customer_userinfo"
       var userTablePartitionID = DateUtils.timeCalcWithFormatConvertSafe(m5timeid.substring(0,8), "yyyyMMdd", -1*24*3600, "yyyyMMdd")
@@ -88,7 +96,7 @@ object OnlineUser extends Logging {
   }
 
   // m5timeid： 起始时间     baseHourid：用户在线基准数据的时间点
-  def doCalcOnlineNums(sc: SparkContext, sqlContext: HiveContext, m5timeid: String, baseHourid: String): Unit = {
+  def doCalcOnlineNums(sc: SparkContext, sqlContext: HiveContext, m5timeid: String, baseHourid: String, ifUpdatealarmChk:Boolean): Unit = {
     import sqlContext.implicits._
 
     //val m5timeid = "201707271600"
@@ -101,6 +109,7 @@ object OnlineUser extends Logging {
     val curHourM5 = m5timeid.substring(8, 12)
 
     val startMinuTime = baseHourid.substring(8, 10)+"00"
+
     val endMinuTime = m5timeid.substring(8, 12)
 
     // 获取间隔的天数
@@ -110,14 +119,19 @@ object OnlineUser extends Logging {
     for (i <- 0 to intervalDay.toInt) {
       val dayid = DateUtils.timeCalcWithFormatConvertSafe(beginDay, "yyyyMMdd", i * 24 * 60 * 60, "yyyyMMdd")
       if (i == 0) {
-        hbaseDF = registerRDD(sc, "iot_detail_online_users_" + dayid).toDF().filter(s"time > ${startMinuTime}")
-      } else if (i == intervalDay) {
-        val tmpDF = registerRDD(sc, "iot_detail_online_users_" + dayid).toDF().filter(s"time <= ${endMinuTime}")
-        hbaseDF = hbaseDF.unionAll(tmpDF)
-      } else {
+        hbaseDF = registerRDD(sc, "iot_detail_online_users_" + dayid).toDF().filter(s"time >= ${startMinuTime}")
+      } else if(i < intervalDay) {
         val tmpDF = registerRDD(sc, "iot_detail_online_users_" + dayid).toDF()
         hbaseDF = hbaseDF.unionAll(tmpDF)
       }
+
+      if (i == intervalDay && intervalDay > 0) {
+        val tmpDF = registerRDD(sc, "iot_detail_online_users_" + dayid).toDF().filter(s"time <= ${endMinuTime}")
+        hbaseDF = hbaseDF.unionAll(tmpDF)
+      }else if(intervalDay == 0){
+        hbaseDF = hbaseDF.filter(s"time <= ${endMinuTime}")
+      }
+
     }
 
 
@@ -164,15 +178,32 @@ object OnlineUser extends Logging {
     onlineJobConf.setOutputFormat(classOf[TableOutputFormat])
     onlineJobConf.set(TableOutputFormat.OUTPUT_TABLE, htable)
 
+    // 预警表
+    val alarmChkTable = "analyze_rst_tab"
+    val alarmChkJobConf = new JobConf(conf, this.getClass)
+    alarmChkJobConf.setOutputFormat(classOf[TableOutputFormat])
+    alarmChkJobConf.set(TableOutputFormat.OUTPUT_TABLE, alarmChkTable)
+
     val onlineHbaseRDD = onlineDF.rdd.map(x => (x.getString(0), x.getDouble(1), x.getDouble(2)))
     val onlineRDD = onlineHbaseRDD.map { arr => {
       val terminatePut = new Put(Bytes.toBytes(arr._1 + "_" + curHourM5.toString))
+      val alarmPut = new Put(Bytes.toBytes(arr._1))
+
       terminatePut.addColumn(Bytes.toBytes("info"), Bytes.toBytes("c_3g_cnt"), Bytes.toBytes(arr._2.toString))
       terminatePut.addColumn(Bytes.toBytes("info"), Bytes.toBytes("c_4g_cnt"), Bytes.toBytes(arr._3.toString))
-      (new ImmutableBytesWritable, terminatePut)
+      terminatePut.addColumn(Bytes.toBytes("info"), Bytes.toBytes("c_all_cnt"),Bytes.toBytes((arr._2 + arr._3).toString))
+
+      alarmPut.addColumn(Bytes.toBytes("alarmChk"), Bytes.toBytes("onlineuser_c_time"), Bytes.toBytes(m5timeid))
+      alarmPut.addColumn(Bytes.toBytes("alarmChk"), Bytes.toBytes("onlineuser_c_cnt"), Bytes.toBytes((arr._2 + arr._3).toString))
+
+      ((new ImmutableBytesWritable, terminatePut),(new ImmutableBytesWritable, alarmPut))
     }
     }
-    onlineRDD.saveAsHadoopDataset(onlineJobConf)
+    onlineRDD.map(_._1).saveAsHadoopDataset(onlineJobConf)
+
+    if(ifUpdatealarmChk){
+      onlineRDD.map(_._2).saveAsHadoopDataset(alarmChkJobConf)
+    }
 
   }
 
@@ -197,8 +228,13 @@ object OnlineUser extends Logging {
     sqlContext.sql(
       s"""
          |CACHE TABLE ${radiusTable} as
-         |select mdn, status, nettype, regexp_replace(terminatecause, ' ', '') as terminatecause
+         |select mdn, status, nettype, regexp_replace(terminatecause, ' ', '') as terminatecause,
+         |(case when terminatecause='UserRequest' then 'succ' else 'failed' end ) as result
          |from pgwradius_out where dayid='${dayid}' and time>='${startTime}'  and time<'${endTime}'
+         |union all
+         |select mdn, status, nettype, terminatecause,
+         |(case when terminatecause in('2','7','8','9','11','12','13','14','15') then 'succ' else 'failed' end ) as result
+         |from iot_radius_ha where dayid='${dayid}' and time>='${startTime}'  and time<'${endTime}'
        """.stripMargin).coalesce(1)
 
 
@@ -263,7 +299,7 @@ object OnlineUser extends Logging {
          |sum(case when p.nettype='3G' then 1 else 0 end) as stopCause3GCnt,
          |sum(case when p.nettype='4G' then 1 else 0 end) as stopCause4GCnt
          |from ${radiusTable} p, ${cachedUserinfoTable} u
-         |where u.mdn = p.mdn and p.status='Stop' and p.terminatecause<>'UserRequest'
+         |where u.mdn = p.mdn and p.status='Stop' and p.result<>'succ'
          |group by u.vpdncompanycode, p.terminatecause
        """.stripMargin
     val radiusTermiateDF = sqlContext.sql(radiusTermiateSql).coalesce(1)

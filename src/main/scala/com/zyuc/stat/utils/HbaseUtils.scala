@@ -78,6 +78,18 @@ object HbaseUtils {
     table.put(p)
   }
 
+  def upSertColumnByRowkey(tableName:String, family:String, rowkey:String, cloumn:String, value:String) = {
+    val conf = HBaseConfiguration.create()
+    conf.set("hbase.zookeeper.property.clientPort", ConfigProperties.IOT_ZOOKEEPER_CLIENTPORT)
+    conf.set("hbase.zookeeper.quorum", ConfigProperties.IOT_ZOOKEEPER_QUORUM)
+    val conn = ConnectionFactory.createConnection(conf)
+    val userTable = TableName.valueOf(tableName)
+    val table = conn.getTable(userTable)
+    val p = new Put(rowkey.getBytes)
+    p.addColumn(family.getBytes,cloumn.getBytes, value.getBytes())
+    table.put(p)
+  }
+
   def main(args: Array[String]): Unit = {
     getCloumnValueByRowkey("iot_dynamic_info","rowkey001","onlinebase","baseHourid")
 

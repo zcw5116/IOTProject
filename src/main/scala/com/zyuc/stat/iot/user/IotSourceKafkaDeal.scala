@@ -49,7 +49,7 @@ object IotSourceKafkaDeal extends GetProperties {
     // 配置信息
     val kafkaParams = Map[String, String]("metadata.broker.list" -> prop.getProperty("kafka.metadata.broker.list"))
     // 获取topic和partition参数
-    val groupName = "IotSourceKafkaDeal"
+    val groupName = "IotSourceKafkaDeal1"
     // 获取kafkaStream
     val kafkaStream = SparkKafkaUtils.createDirectKafkaStream(ssc, kafkaParams, zkClient, topics, groupName)
 
@@ -98,7 +98,7 @@ object IotSourceKafkaDeal extends GetProperties {
           .toDF()
           .registerTempTable("registerTempTable_pgwradius_out")
 
-        hiveContext.sql("insert into iotl.pgwradius_out partition(dayid) " +
+        hiveContext.sql("insert into iot.pgwradius_out partition(dayid) " +
           "select " +
           " APN, " +
           " Duration, " +
