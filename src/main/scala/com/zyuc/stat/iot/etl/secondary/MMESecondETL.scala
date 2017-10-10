@@ -31,7 +31,7 @@ object MMESecondETL extends Logging {
     val appName = sc.getConf.get("spark.app.name")  // name_{type}_h_2017073111
     val inputPath = sc.getConf.get("spark.app.inputPath") //" hdfs://EPC-LOG-NM-15:8020/hadoop/IOT/ANALY_PLATFORM/MME/data/"
     val outputPath = sc.getConf.get("spark.app.outputPath")  //"hdfs://EPC-IOT-ES-06:8020/hadoop/IOT/ANALY_PLATFORM/MME/secondETLData/"
-    val userTable = sc.getConf.get("spark.app.user.table") //"iot_customer_userinfo"
+    val userTable = sc.getConf.get("spark.app.user.table") //"iot_customer_userinfo" ==> iot_basic_userinfo
     val userTablePartitionID = sc.getConf.get("spark.app.user.userTablePatitionDayid")
     val terminalTable = sc.getConf.get("spark.app.terminal.table") // "iot_dim_terminal"
     val mmeLogTable = sc.getConf.get("spark.app.table.source") // "iot_mme_log"
@@ -65,7 +65,7 @@ object MMESecondETL extends Logging {
       val terminalDF = sqlContext.table(terminalTable).select("tac", "modelname", "devicetype").cache() //sqlContext.read.format("orc").load("/hadoop/IOT/ANALY_PLATFORM/BasicData/IOTTerminal/data")
 
       val userDF = sqlContext.table(userTable).filter("d=" + preDayid).
-        selectExpr("mdn", "custprovince", "case when length(vpdncompanycode)=0 then 'N999999999' else vpdncompanycode end  as vpdncompanycode").
+        selectExpr("mdn", "belo_prov as custprovince", "case when length(companycode)=0 then 'P999999999' else companycode  end  as vpdncompanycode").
         cache()
 
 

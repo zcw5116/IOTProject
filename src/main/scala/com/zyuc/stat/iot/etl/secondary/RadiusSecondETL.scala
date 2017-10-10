@@ -33,7 +33,7 @@ object RadiusSecondETL {
     val storedTablename = sc.getConf.get("spark.app.table.stored")//iot_radius_data_d
 
     val userDF = sqlContext.table(userTable).filter("d=" + userTablePatitionDayid).
-      selectExpr("mdn", "custprovince", "vpdncompanycode").
+      selectExpr("mdn", "belo_prov as custprovince", "companycode").
       cache()
 
     val dayid = radiustime.substring(0,8)

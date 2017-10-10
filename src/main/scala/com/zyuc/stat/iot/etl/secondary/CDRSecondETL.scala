@@ -74,7 +74,7 @@ object CDRSecondETL extends Logging {
 
 
       val userDF = sqlContext.table(userTable).filter("d=" + userTablePatitionDayid).
-        selectExpr("mdn", "imsicdma", "custprovince", "case when length(vpdncompanycode)=0 then 'N999999999' else vpdncompanycode end  as vpdncompanycode").
+        selectExpr("mdn", "imsicdma", "belo_prov as custprovince", "case when length(companycode)=0 then 'P999999999' else companycode end  as vpdncompanycode").
         cache()
 
 
