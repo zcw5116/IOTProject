@@ -28,8 +28,8 @@ object AbnomalFlowAnalysisDay {
     // company province nettype
     val tmpCompanyTable = s"${appName}_tmp_Company"
     sqlContext.sql(
-      s"""select distinct (case when length(custprovince)=0 or custprovince is null then '其他' else custprovince end)  as custprovince,
-         |       case when length(vpdncompanycode)=0 or vpdncompanycode is null then 'N999999999' else vpdncompanycode end  as vpdncompanycode
+      s"""select distinct (case when length(belo_prov)=0 or belo_prov is null then '其他' else belo_prov end)  as custprovince,
+         |       case when length(companycode)=0 or companycode is null then 'P999999999' else companycode end  as vpdncompanycode
          |from ${userTable}
          |where d='${userTablePartitionID}'
        """.stripMargin
@@ -132,13 +132,14 @@ object AbnomalFlowAnalysisDay {
 
 
     val coalesceNum = 1
-    val outputLocatoin = outputPath + "json/data/" + dayid
+    val tmpoutputPath = outputPath + "tmp/" + dayid + "/"
 
     val fileSystem = FileSystem.newInstance(sc.hadoopConfiguration)
 
-    resultDF.repartition(coalesceNum.toInt).write.mode(SaveMode.Overwrite).format("json").save(outputLocatoin)
-
-    FileUtils.downFilesToLocal(fileSystem, outputLocatoin, localOutputPath , dayid, ".json")
+    //存储在临时目录
+    resultDF.repartition(coalesceNum.toInt).write.mode(SaveMode.Overwrite).format("json").save(tmpoutputPath)
+    FileUtils.moveTempFilesToESpath(fileSystem,outputPath,dayid,dayid)
+    // FileUtils.downFilesToLocal(fileSystem, outputLocatoin, localOutputPath , dayid, ".json")
 
     sc.stop()
   }

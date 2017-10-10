@@ -1,19 +1,17 @@
 package com.zyuc.stat.iot.multiana
 
-
 import com.zyuc.stat.properties.ConfigProperties
 import com.zyuc.stat.utils.FileUtils
 import org.apache.hadoop.fs.FileSystem
-import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.functions.{lit, when}
+import org.apache.spark.sql.hive.HiveContext
 
 /**
-  * Created by zhoucw on 17-8-17.
+  * Created by dell on 2017/9/13.
   */
-object CardAnalysis {
-
+object CardCommonAnalysis {
   def main(args: Array[String]): Unit = {
 
     val sparkConf = new SparkConf()//.setAppName("OperalogAnalysis").setMaster("local[4]")
@@ -34,10 +32,42 @@ object CardAnalysis {
     val partitionD = dayid.substring(2, 8)
 
 
+
+    //开销户统计汇总
+
+    val cachedOperaTable = s"iot_opera_log_cached_$dayid"
+    sqlContext.sql(
+      s"""CACHE TABLE ${cachedOperaTable} as
+         |select l.mdn, l.logtype, l.opername, l.custprovince, l.vpdncompanycode,
+         |       case when opername='open' and logtype='HLR' then 1 else 0 end 3gopen,
+         |       case when opername='open' and logtype='HSS' then 1 else 0 end 4gopen,
+         |       case when opername='close' and logtype='HLR' then 1 else 0 end 3gclose,
+         |       case when opername='close' and logtype='HSS' then 1 else 0 end 4gclose
+         |from   ${operTable} l
+         |where  l.opername in('open','close') and l.oper_result='成功' and length(mdn)>0 and  l.d = '${partitionD}'
+       """.stripMargin)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     val tmpCompanyTable = s"${appName}_tmp_Company"
     sqlContext.sql(
-      s"""select distinct (case when length(belo_prov)=0 or belo_prov is null then '其他' else belo_prov end)  as custprovince,
-         |           case when length(companycode)=0 or companycode is null then 'P999999999' else companycode end  as vpdncompanycode
+      s"""select distinct (case when length(custprovince)=0 or custprovince is null then '其他' else custprovince end)  as custprovince,
+         |           case when length(vpdncompanycode)=0 or vpdncompanycode is null then 'N999999999' else vpdncompanycode end  as vpdncompanycode
          |    from ${userTable}
          |    where d='${userTablePartitionID}'
          |
@@ -65,13 +95,13 @@ object CardAnalysis {
     // online
     //val onlineHourDF = sqlContext.table(onlineTable).filter("d="+partitionD).selectExpr("vpdncompanycode",
     //"case when nettype='3G' then '2/3G' else nettype end as nettype", "floor(onlinenum)")
-   //// val onlineHourDF = sqlContext.sql(
-   ////   s"""select vpdncompanycode, case when nettype='3G' then '2/3G' else nettype end as nettype,
-   ////      |      floor(round(avg(onlinenum),0))  as onlinenum
-   ////      |from ${onlineTable}
-   ////      |group by vpdncompanycode, case when nettype='3G' then '2/3G' else nettype end
-   ////    """.stripMargin
-   //// ).cache()
+    //// val onlineHourDF = sqlContext.sql(
+    ////   s"""select vpdncompanycode, case when nettype='3G' then '2/3G' else nettype end as nettype,
+    ////      |      floor(round(avg(onlinenum),0))  as onlinenum
+    ////      |from ${onlineTable}
+    ////      |group by vpdncompanycode, case when nettype='3G' then '2/3G' else nettype end
+    ////    """.stripMargin
+    //// ).cache()
     val onlineHourDF = sqlContext.sql(
       s"""select vpdncompanycode,floor(avg(g3cnt)) onlinenum,'2/3G' as nettype
          |from  ${onlineTable}
@@ -107,7 +137,7 @@ object CardAnalysis {
     resultDF =  resultDF.join(activedUserDF, resultDF.col("vpdncompanycode")===activedUserDF.col("vpdncompanycode") &&
       resultDF.col("nettype")===activedUserDF.col("nettype"), "left").
       select(
-      resultDF.col("custprovince"), resultDF.col("vpdncompanycode").alias("companycode"),
+        resultDF.col("custprovince"), resultDF.col("vpdncompanycode").alias("companycode"),
         resultDF.col("nettype"),
         when(resultDF.col("opennum").isNull, 0).otherwise(resultDF.col("opennum")).alias("opennum"),
         when(resultDF.col("closenum").isNull, 0).otherwise(resultDF.col("closenum")).alias("closenum"),

@@ -33,11 +33,12 @@ object AbnomalFlowAnalysisHour {
     val partitionH = summarytime.substring(8,10)
     val dayid      = summarytime.substring(0, 8)
     val sumhour = hourid.substring(0,10)
+    val timeid = sumhour
     // company province nettype
     val tmpCompanyTable = s"${appName}_tmp_Company"
     sqlContext.sql(
-      s"""select distinct (case when length(custprovince)=0 or custprovince is null then '其他' else custprovince end)  as custprovince,
-         |       case when length(vpdncompanycode)=0 or vpdncompanycode is null then 'N999999999' else vpdncompanycode end  as vpdncompanycode
+      s"""select distinct (case when length(belo_prov)=0 or belo_prov is null then '其他' else belo_prov end)  as custprovince,
+         |       case when length(companycode)=0 or companycode is null then 'P999999999' else companycode end  as vpdncompanycode
          |from ${userTable}
          |where d='${userTablePartitionID}'
        """.stripMargin
@@ -116,14 +117,14 @@ object AbnomalFlowAnalysisHour {
 
 
     val coalesceNum = 1
-    val outputLocatoin = outputPath + "json/data/" + hourid.substring(0,8) + "/" + hourid.substring(8,10)
+    val outputLocatoin = outputPath  + "tmp/" + timeid + "/"
 
     val fileSystem = FileSystem.newInstance(sc.hadoopConfiguration)
 
     resultDF.repartition(coalesceNum.toInt).write.mode(SaveMode.Overwrite).format("json").save(outputLocatoin)
 
-
-    FileUtils.downFilesToLocal(fileSystem, outputLocatoin, localOutputPath + "/"+ hourid.substring(0,8) + "/", hourid.substring(8,10), ".json")
+    FileUtils.moveTempFilesToESpath(fileSystem,outputPath,timeid,dayid)
+    //FileUtils.downFilesToLocal(fileSystem, outputLocatoin, localOutputPath + "/"+ hourid.substring(0,8) + "/", hourid.substring(8,10), ".json")
 
     sc.stop()
   }

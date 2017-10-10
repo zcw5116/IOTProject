@@ -4,9 +4,9 @@ import com.zyuc.stat.properties.ConfigProperties
 import com.zyuc.stat.utils.FileUtils
 import org.apache.hadoop.fs.FileSystem
 import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{Logging, SparkConf, SparkContext}
-import org.apache.spark.sql.functions._
 
 /**
   * Created by LiJian on 2017/7/28.
@@ -34,7 +34,8 @@ object IotTerminalAnaly extends Logging{
 
 
     val userDF = sqlContext.table(userTable).filter("d=" + userTablePartitionDayid).
-      selectExpr("mdn", "imei", "case when length(custprovince)=0 or custprovince is null then '其他' else custprovince end  as custprovince", "case when length(vpdncompanycode)=0 then 'N999999999' else vpdncompanycode end  as vpdncompanycode").
+      selectExpr("mdn", "imei", "case when length(belo_prov)=0 or belo_prov is null then '其他' else belo_prov end  as custprovince",
+        "case when length(companycode)=0 then 'P999999999' else companycode end  as vpdncompanycode").
       cache()
 
     val aggTmpDF = userDF.join(terminalDF, userDF.col("imei").substr(0,8)===terminalDF.col("tac"), "left").
@@ -54,11 +55,11 @@ object IotTerminalAnaly extends Logging{
       aggDF.col("tercnt"))
 
 
-    val terminalOutputLocatoin = terminalOutputPath + "json/data/" + userTablePartitionDayid
+    val terminalOutputLocatoin = terminalOutputPath  + "tmp/" + userTablePartitionDayid+"/"
 
     resultDF.repartition(coalesceNum.toInt).write.mode(SaveMode.Overwrite).format("json").save(terminalOutputLocatoin)
-
-    FileUtils.downFilesToLocal(fileSystem, terminalOutputLocatoin, localOutputPath, userTablePartitionDayid, ".json")
+    FileUtils.moveTempFilesToESpath(fileSystem,terminalOutputPath,userTablePartitionDayid,userTablePartitionDayid)
+    //FileUtils.downFilesToLocal(fileSystem, terminalOutputLocatoin, localOutputPath, userTablePartitionDayid, ".json")
 
   }
 }

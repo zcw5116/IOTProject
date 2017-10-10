@@ -56,7 +56,7 @@ object ActivedUserAnalysis {
     sqlContext.sql(
       s"""CACHE TABLE ${tmpUserTable} as
          |select mdn,
-         |case when length(vpdncompanycode)=0 then 'N999999999' else vpdncompanycode end  as vpdncompanycode
+         |case when length(companycode)=0 then 'N999999999' else companycode end  as vpdncompanycode
          |from ${userTable} t
          |where d='${userTablePartitionID}'
        """.stripMargin)

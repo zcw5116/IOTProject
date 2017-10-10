@@ -33,108 +33,134 @@ object CommonMultiAnalysis extends Logging {
 
 
     //判断统计起始和截止时间
-    val intervals = interval.toInt * 60
-    var beginStrH:String = null
-    var endStrH:String = null
+    val intervals = interval.toInt * 60  //周期
+    var beginStr:String = null
+    var endStr:String = null
     var intervalbegin:Int = 0
     var intervalend:Int = 0
-    //每次执行一个小时
+    var timeformat:String = null           // json数据中的时间格式
+    var datatime:String = null            //json数据中显示的时间
+    var timeid:String = null              //临时目录中的时间子目录
+    var dayid:String = begintime.substring(0,8)  //数据最终存放目录中的时间子目录
+
+    logInfo("##########--sumitemtype: " + sumitemtype)
+    logInfo("##########--begintime: " + begintime)
+    logInfo("##########--endtime: " + endtime)
+    logInfo("##########--interval: " + interval)
+    logInfo("##########--cyctype: " + cyctype)
+
+    //每次执行一个周期，最小周期为小时
     if(cyctype == "min"){
       intervalbegin = intervals*(-1)
-      intervalend = intervals*(-1) + 60*60
+      intervalend = intervals*(-1)+60*60
+      timeformat = "yyyyMMddHHmm"
+      timeid = begintime.substring(0,10)
     }else if(cyctype == "h"){
       intervalbegin = intervals*(-1)
       intervalend = intervals*(-1)
+      timeformat = "yyyyMMddHH"
+      timeid = begintime.substring(0,10)
+    }else if(cyctype == "d"){
+      intervalbegin = 0
+      intervalend = 0
+      timeformat = "yyyyMMdd"
+      timeid = begintime.substring(0,8)
+      datatime = begintime.substring(0,8)
+    }else if(cyctype == "w"){
+      intervalbegin = 0
+      intervalend = 6*24*60*60
+      timeformat = "yyyyMMdd"
+      timeid = begintime.substring(0,8)
+      datatime = begintime.substring(0,8)
+    }else if(cyctype == "m"){
+      intervalbegin = 0
+      val monthid = begintime.substring(4,6)
+      if(monthid == "02"){
+        intervalend = 27*24*60*60
+      }else if(monthid == "01"|| monthid == "03"|| monthid == "05"|| monthid == "07"|| monthid == "08"|| monthid == "10"|| monthid == "12"){
+        intervalend = 30*24*60*60
+      }else{
+        intervalend = 29*24*60*60
+      }
+      timeid = begintime.substring(0,6)
+      timeformat = "yyyyMM"
+      datatime = begintime.substring(0,6)
+      dayid = dayid.substring(0,6)
     }
-    beginStrH = DateUtils.timeCalcWithFormatConvertSafe(begintime.substring(0,12), "yyyyMMddHHmm", intervalbegin, "yyyyMMddHHmmss")
-    endStrH = DateUtils.timeCalcWithFormatConvertSafe(begintime.substring(0,12), "yyyyMMddHHmm", intervalend, "yyyyMMddHHmmss")
+    beginStr = DateUtils.timeCalcWithFormatConvertSafe(begintime.substring(0,12), "yyyyMMddHHmm", intervalbegin, "yyyyMMddHHmmss")
+    endStr = DateUtils.timeCalcWithFormatConvertSafe(begintime.substring(0,12), "yyyyMMddHHmm", intervalend, "yyyyMMddHHmmss")
 
-    //val beginStrD = DateUtils.timeCalcWithFormatConvertSafe(begintime, "yyyyMMdd", 0, "yyyyMMddHHmmss")
-    //val endStrD = DateUtils.timeCalcWithFormatConvertSafe(endtime, "yyyyMMdd", 0, "yyyyMMddHHmmss")
-
-    val beginStrD = begintime.substring(0,8)
-    val endStrD = endtime.substring(0,8)
+    val beginStrH = beginStr
+    val endStrH = endStr
+    val beginStrD = beginStr.substring(0,8)
+    val endStrD = endStr.substring(0,8)
 
     //获取开始时间戳
     val fm = new SimpleDateFormat("yyyyMMddHHmmss")
-    val dt = fm.parse(beginStrH)
+    val dt = fm.parse(begintime.substring(0,14))
     val begintimestamp = dt.getTime
-
 
     //获取汇总类型
     val ItmeName = sumitemtype.substring(0,sumitemtype.lastIndexOf("_") + 1) //"authlog"
     val subItmeName = sumitemtype.substring(sumitemtype.lastIndexOf("_") + 1) //"4gaaa"
 
-
+    logInfo("##########--sumitemtype: " + sumitemtype)
+    logInfo("##########--begintime: " + begintime)
+    logInfo("##########--endtimeH: " + endStrH)
+    logInfo("##########--endtimeD: " + endStrD)
+    logInfo("##########--begintimestamp: " + begintimestamp)
+    logInfo("##########--intervals: " + intervals)
 
 
     //从小时或天表取数据
     // 按照粒度汇总数据,一次汇一个周期数据，开始时间作为统计时间，分钟为每小时统计一次,12~13点汇总12点数据
     var filterDF:DataFrame =null
     var resultDF:DataFrame = null
-    var timeid:String = null
+
     var outputfsSuffix:String = null
     var outputsubLSuffix:String = null
     var outputLSuffix:String = null
-    var timeformat:String = null
-    if(cyctype == "min" || cyctype == "h"){
-      if(cyctype=="min" ){
-        timeid = begintime.substring(0,12)
-        timeformat = "yyyyMMddHHmm"
-      }else if(cyctype == "h"){
-        timeid = begintime.substring(0,10)
-        timeformat = "yyyyMMddHH"
-      }
 
-      logInfo("##########--begintime: " + beginStrH)
-      logInfo("##########--endtime: " + endStrH)
-      logInfo("##########--begintimestamp: " + begintimestamp)
-      logInfo("##########--intervals: " + intervals)
+    if(cyctype == "min" || cyctype == "h"){
+
+
+
       filterDF = LoadfileByPartitinH(sumitemtype,sqlContext,beginStrH,endStrH,inputPath,intervals)
       resultDF = SummarySourceHour(sqlContext,filterDF,sumitemtype,begintimestamp,intervals,userTable,userTablePartitionDayid,timeformat)
-      outputfsSuffix = begintime.substring(0,8) + "/" + begintime.substring(8,10)
-      outputsubLSuffix =  "/"+ begintime.substring(0,8)
-      outputLSuffix = begintime.substring(8,10)
+
+
     }else if(cyctype == "d" || cyctype == "w"|| cyctype == "m"){
-      if(cyctype == "d"){
-        timeid = begintime.substring(0,8)
-      }else if(cyctype == "w"){
-        timeid = begintime.substring(0,8)
-      }else if(cyctype == "w"){
-        timeid = begintime.substring(0,6)
-      }
-      outputfsSuffix = timeid
-      outputLSuffix = timeid
-      logInfo("##########--begintime: " + beginStrD)
-      logInfo("##########--endtime: " + endStrD)
-      logInfo("##########--sumitemtype: " + sumitemtype)
-      logInfo("##########--timeid: " + timeid)
+
       filterDF = LoadfileByPartitinD(sqlContext,beginStrD,endStrD,inputPath,intervals)
       if(filterDF == null){
         logInfo("##########--filterDF: is null")
       }
-      resultDF = SummarySourceDay(sqlContext,filterDF,sumitemtype,timeid,intervals,userTable,userTablePartitionDayid)
+      resultDF = SummarySourceDay(sqlContext,filterDF,sumitemtype,datatime,intervals,userTable,userTablePartitionDayid)
       if(resultDF == null){
         logInfo("##########--resultDF: is null")
       }
-      outputsubLSuffix ="/"
+
     }
+
 
 
     // 文件写入JSON
     val coalesceNum = 1
-    val outputLocatoin = outputPath + "json/data/" +outputfsSuffix
-    val localpath =  localOutputPath + outputsubLSuffix
+    val outputLocatoin = outputPath + "tmp/" +timeid+"/"
+    //val localpath =  localOutputPath
 
     val fileSystem = FileSystem.newInstance(sc.hadoopConfiguration)
 
     resultDF.repartition(coalesceNum.toInt).write.mode(SaveMode.Overwrite).format("json").save(outputLocatoin)
 
-    FileUtils.downFilesToLocal(fileSystem, outputLocatoin, localpath + "/", outputLSuffix, ".json")
+    FileUtils.moveTempFilesToESpath(fileSystem,outputPath,timeid,dayid)
+    //FileUtils.downFilesToLocal(fileSystem, outputLocatoin, localpath + "/", outputLSuffix, ".json")
 
     sc.stop()
 
+
   }
+
   // 按分区加载数据
   def LoadfileByPartitinH  (partitioncolname:String,sqlContext:SQLContext, begintime:String, endtime:String,inputPath:String,intervals:Int): DataFrame ={
     var filterDF:DataFrame = null
@@ -292,7 +318,6 @@ object CommonMultiAnalysis extends Logging {
           countDistinct(filterDF.col("mdn")).as("mdncnt")
         )
     }else if(ItmeName == "flow"){
-
 
 
     }
