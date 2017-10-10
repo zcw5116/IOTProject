@@ -2,7 +2,10 @@ package com.zyuc.stat.utils
 
 import java.text.SimpleDateFormat
 import java.util.Date
+
 import org.apache.commons.lang3.time.FastDateFormat
+import org.joda.time.DateTime
+import org.joda.time.format.DateTimeFormat
 
 
 /**
@@ -76,13 +79,46 @@ object DateUtils {
     return  interval
   }
 
+  def getWeeks(sometime:String,format:String): Map[String,String] = {
+
+    val dayofweek =  DateTime.parse(sometime,DateTimeFormat.forPattern(format)).dayOfWeek().get()
+    println("dayofweek:  "+dayofweek)
+    val firstday = DateTime.parse(sometime,DateTimeFormat.forPattern(format)).minusDays(dayofweek-1).toString("yyyyMMdd")
+    println("firstday:  "+firstday)
+    val lastday =  DateTime.parse(firstday,DateTimeFormat.forPattern("yyyyMMdd")).plusWeeks(1).minusDays(1).toString("yyyyMMdd")
+    println("lastday:  "+lastday)
+    val weekinfo = Map("dayofweek" -> dayofweek.toString, "firstday" -> firstday,"lastday"->lastday)
+    weekinfo
+  }
+
+  def getmonths(sometime:String,format:String): Map[String,String] = {
+
+    val dayofmonth =  DateTime.parse(sometime,DateTimeFormat.forPattern(format)).dayOfMonth().get()
+    println("dayofmonth:  "+dayofmonth)
+    val firstday = DateTime.parse(sometime,DateTimeFormat.forPattern(format)).minusDays(dayofmonth-1).toString("yyyyMMdd")
+    println("firstday:  "+firstday)
+    val lastday =  DateTime.parse(firstday,DateTimeFormat.forPattern("yyyyMMdd")).plusMonths(1).minusDays(1).toString("yyyyMMdd")
+    println("lastday:  "+lastday)
+    val monthinfo = Map("dayofmonth" -> dayofmonth.toString, "firstday" -> firstday,"lastday"->lastday)
+    monthinfo
+  }
+
   def main(args: Array[String]): Unit = {
 
     val test = timeInterval("201707271937","201707271938","yyyyMMddHHmm")
     println("test:"+test)
 
     val dataDayid = "20170715"
+    val format = "yyyyMMdd"
     val preDayid = DateUtils.timeCalcWithFormatConvertSafe("00", "HH", 60 * 60, "HH")
     println(s"${preDayid}")
+    val monthinfo = getmonths(dataDayid,format)
+    val dataDayid1 = "20170815"
+    val format1 = "yyyyMMdd"
+    val monthinfo1 = getmonths(dataDayid1,format1)
+    println(monthinfo)
+    println(monthinfo1)
+
   }
+
 }

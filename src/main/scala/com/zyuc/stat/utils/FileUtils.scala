@@ -4,7 +4,8 @@ package com.zyuc.stat.utils
   * Created by zhoucw on 17-7-19.
   */
 
-import java.io.{File, FileOutputStream, IOException, InputStream}
+import java.io.{File, FileOutputStream, IOException}
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.io.IOUtils
@@ -111,6 +112,48 @@ object FileUtils extends Logging{
   }
 
 
+  def moveTempFilesToESpath(fileSystem: FileSystem, outputPath: String, timeid: String,dayid:String): Unit = {
+
+
+    //,filesuffix:String
+    logInfo("##########--outputPath:" +  outputPath)
+    logInfo("##########--timeid:" +  timeid)
+    logInfo("##########--dayid:" +  dayid)
+
+    val dataPath = new Path(outputPath + dayid  + "/"+ timeid +"*")
+    logInfo("##########--dataPath:" +  dataPath)
+    fileSystem.globStatus(dataPath).foreach(x=> fileSystem.delete(x.getPath(),false))
+
+
+    val tmpPath = new Path(outputPath + "tmp/" + timeid + "/part*")
+    val tmpStatus = fileSystem.globStatus(tmpPath)
+    var num = 0
+
+    tmpStatus.map(tmpStat => {
+      val tmpLocation = tmpStat.getPath().toString
+      var dataLocation = tmpLocation.replace(outputPath + "tmp/" + timeid,outputPath + dayid+"/")
+      logInfo("##########--dataLocation:" +  dataLocation)
+      val index = dataLocation.lastIndexOf("/")
+      dataLocation = dataLocation.substring(0, index + 1) + timeid + "-" + num + ".json"
+      num = num + 1
+
+      val tmpPath1 = new Path(tmpLocation)
+      val dataPath = new Path(dataLocation)
+
+      if (!fileSystem.exists(dataPath.getParent)) {
+        fileSystem.mkdirs(dataPath.getParent)
+      }
+      fileSystem.rename(tmpPath1, dataPath)
+      logInfo("##########--dataPath:" +  dataPath)
+
+
+  })
+
+
+
+    // val files = fileSystem.listStatus(path)
+
+  }
 
 
   def moveNewlogFiles(outputPath:String, outFiles:Array[FileStatus], loadTime:String) :Unit = {
