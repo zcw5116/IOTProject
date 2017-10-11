@@ -1,6 +1,5 @@
 package com.zyuc.stat.iot.analysis.realtime
 
-import com.zyuc.stat.iot.analysis.realtime.AuthRealtimeAnalysis.logError
 import com.zyuc.stat.iot.analysis.util.HbaseDataUtil
 import com.zyuc.stat.properties.ConfigProperties
 import com.zyuc.stat.utils.{DateUtils, HbaseUtils, MathUtil}
@@ -21,7 +20,7 @@ object OnlineRealtimeAnalysis extends Logging{
     sqlContext.sql("use " + ConfigProperties.IOT_HIVE_DATABASE)
 
     // 获取参数
-    val appName = sc.getConf.get("spark.app.name","name_201710080040") // name_201708010040
+    val appName = sc.getConf.get("spark.app.name","name_201710101600") // name_201708010040
     val userInfoTable = sc.getConf.get("spark.app.table.userInfoTable", "iot_basic_userinfo") //
     val userAndDomainTable = sc.getConf.get("spark.app.table.userAndDomainTable", "iot_basic_user_and_domain")
     val companyAndDomainTable = sc.getConf.get("spark.app.table.companyAndDomainTable", "iot_basic_company_and_domain")
@@ -29,8 +28,8 @@ object OnlineRealtimeAnalysis extends Logging{
 
     val auth3gTable = sc.getConf.get("spark.app.table.3gRadiusTable", "iot_radius_ha")
     val auth4gTable = sc.getConf.get("spark.app.table.4gRadiusTable", "pgwradius_out")
-    val alarmHtablePre = sc.getConf.get("spark.app.htable.alarmTablePre", "analyze_summ_tab_")
-    val resultHtablePre = sc.getConf.get("spark.app.htable.resultHtablePre", "analyze_summ_rst_everycycle_")
+    val alarmHtablePre = sc.getConf.get("spark.app.htable.alarmTablePre", "analyze_summ_tab_online_")
+    val resultHtablePre = sc.getConf.get("spark.app.htable.resultHtablePre", "analyze_summ_rst_online_")
     val resultDayHtable = sc.getConf.get("spark.app.htable.resultDayHtable", "analyze_summ_rst_everyday")
     val analyzeBPHtable = sc.getConf.get("spark.app.htable.analyzeBPHtable", "analyze_bp_tab")
 
@@ -72,8 +71,9 @@ object OnlineRealtimeAnalysis extends Logging{
     //  curAlarmHtable-当前时刻的预警表,  nextAlarmHtable-下一时刻的预警表,
     val curAlarmHtable = alarmHtablePre + dataTime.substring(0,8)
     val nextAlarmHtable = alarmHtablePre + nextDataTime.substring(0,8)
-    val alarmFamilies = new Array[String](1)
+    val alarmFamilies = new Array[String](2)
     alarmFamilies(0) = "s"
+    alarmFamilies(1) = "e"
     // 创建表, 如果表存在， 自动忽略
     HbaseUtils.createIfNotExists(curAlarmHtable,alarmFamilies)
     HbaseUtils.createIfNotExists(nextAlarmHtable,alarmFamilies)
@@ -109,18 +109,54 @@ object OnlineRealtimeAnalysis extends Logging{
     sqlContext.sql(
       s"""
          |CACHE TABLE ${radiusTable} as
-         |select mdn, status, '4g' as type, regexp_replace(terminatecause, ' ', '') as terminatecause,
-         |(case when terminatecause='UserRequest' then 's' else 'f' end ) as result
-         |from pgwradius_out where dayid='${partitionD}' and time>='${startTimeStr}'  and time<'${endTimeStr}'
-         |union all
-         |select mdn, status, '3g' as type, terminatecause,
-         |(case when terminatecause in('2','7','8','9','11','12','13','14','15') then 's' else 'f' end ) as result
-         |from iot_radius_ha where dayid='${partitionD}' and time>='${startTimeStr}'  and time<'${endTimeStr}'
+         |select t.mdn, t.status, t.type,
+         |       (case when result='f' and length(t.terminatecause)=0 then '-1' else t.terminatecause end) as  terminatecause,
+         |       t.result, u.companycode, u.vpdndomain, u.isvpdn, u.isdirect, u.iscommon
+         |from
+         |(
+         |    select mdn, status, '4g' as type, regexp_replace(terminatecause, ' ', '') as terminatecause,
+         |           (case when terminatecause='UserRequest' then 's' else 'f' end ) as result
+         |    from pgwradius_out
+         |    where dayid='${partitionD}' and time>='${startTimeStr}'  and time<'${endTimeStr}'
+         |    union all
+         |    select mdn, status, '3g' as type, terminatecause,
+         |          (case when terminatecause in('2','7','8','9','11','12','13','14','15') then 's' else 'f' end ) as result
+         |    from iot_radius_ha
+         |    where dayid='${partitionD}' and time>='${startTimeStr}'  and time<'${endTimeStr}'
+         |) t, ${userInfoTableCached} u
+         |where t.mdn = u.mdn
        """.stripMargin)
 
     val vpdnStatSQL =
       s"""
-         |select u.companycode, 'C' as servtype, "-1" as vpdndomain, c.type,
+         |select companycode, 'C' as servtype, null as vpdndomain, type,
+         |sum(case when status='Start' then 1 else 0 end) logincnt,
+         |sum(case when status='Stop' then 1 else 0 end) logoutcnt,
+         |sum(case when status='Stop' and result='s' then 1 else 0 end) normallogoutcnt
+         |from ${radiusTable} c
+         |where isvpdn='1'
+         |group by companycode, type
+         |GROUPING SETS(companycode, (companycode, type))
+         |union all
+         |select t.companycode, 'C' as servtype, t.vpdndomain, t.type,
+         |sum(case when status='Start' then 1 else 0 end) logincnt,
+         |sum(case when status='Stop' then 1 else 0 end) logoutcnt,
+         |sum(case when status='Stop' and result='s' then 1 else 0 end) normallogoutcnt
+         |from(
+         |select companycode, c.vpdndomain, type, status, result
+         |from
+         |( select companycode, vpdndomain, type, status,result
+         |from ${radiusTable} c
+         |where isvpdn='1'
+         |) m lateral view explode(split(m.vpdndomain,',')) c as vpdndomain
+         |) t
+         |group by companycode, vpdndomain, type
+         |GROUPING SETS((companycode, vpdndomain), (companycode, vpdndomain, type))
+       """.stripMargin
+
+/*    val vpdnStatSQL =
+      s"""
+         |select u.companycode, 'C' as servtype, null as vpdndomain, c.type,
          |sum(case when c.status='Start' then 1 else 0 end) logincnt,
          |sum(case when c.status='Stop' then 1 else 0 end) logoutcnt,
          |sum(case when c.status='Stop' and c.result='s' then 1 else 0 end) normallogoutcnt
@@ -143,7 +179,7 @@ object OnlineRealtimeAnalysis extends Logging{
          |) t
          |group by companycode, vpdndomain, type
          |GROUPING SETS((companycode, vpdndomain), (companycode, vpdndomain, type))
-       """.stripMargin
+       """.stripMargin*/
     val vpdnDF = sqlContext.sql(vpdnStatSQL)
 
     val commonAndDirectSQL =
@@ -151,24 +187,23 @@ object OnlineRealtimeAnalysis extends Logging{
          |select companycode, servtype, null as vpdndomain, type,
          |       sum(case when status='Start' then 1 else 0 end) logincnt,
          |       sum(case when status='Stop' then 1 else 0 end) logoutcnt,
-         |       sum(case when status='Stop' and result='s' then 1 else 0 end) normallogoutcnt
+         |       sum(case when status='Stop' and result='f' then 1 else 0 end) normallogoutcnt
          |       from
          |       (
-         |           select u.companycode,
-         |                  (case when u.isdirect='1' then 'D' when u.iscommon='1' then 'P' else '-1' end) as servtype,
-         |                  c.type, c.status, c.result
-         |           from ${userInfoTableCached} u, ${radiusTable} c
-         |           where c.mdn = u.mdn
+         |           select companycode,
+         |                  (case when isdirect='1' then 'D' when iscommon='1' then 'P' else '-1' end) as servtype,
+         |                  type, status, result
+         |           from ${radiusTable} c
          |       ) m
          |       group by companycode, servtype, type
-         |       GROUPING SETS(companycode, (companycode, servtype), (companycode, servtype, type))
+         |       GROUPING SETS(companycode, (companycode,type), (companycode, servtype), (companycode, servtype, type))
        """.stripMargin
 
     val commonAndDirectDF = sqlContext.sql(commonAndDirectSQL).filter("servtype is null or servtype!='-1'")
 
     val resultDF = vpdnDF.unionAll(commonAndDirectDF)
 
-    val resultRDD = resultDF.rdd.map(x=>{
+    val resultRDD = resultDF.coalesce(1).rdd.map(x=>{
 
       val companyCode = x(0).toString
       val servType = if(null == x(1)) "-1" else x(1).toString
@@ -180,13 +215,11 @@ object OnlineRealtimeAnalysis extends Logging{
       val logoutCnt = x(5).toString
       val normalLogoutCnt = x(6).toString
 
-
       val curAlarmRowkey = progRunType + "_" + dataTime.substring(8,12) + "_" + companyCode + "_" + servType + "_" + domain
       val curAlarmPut = new Put(Bytes.toBytes(curAlarmRowkey))
       curAlarmPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_c_" + netFlag + "_li"), Bytes.toBytes(loginCnt))
       curAlarmPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_c_" + netFlag + "_lo"), Bytes.toBytes(logoutCnt))
       curAlarmPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_c_" + netFlag + "_nlo"), Bytes.toBytes(normalLogoutCnt))
-
 
       val nextAlarmRowkey = progRunType + "_" + nextDataTime.substring(8,12) + "_" + companyCode + "_" + servType + "_" + domain
       val nexAlarmtPut = new Put(Bytes.toBytes(nextAlarmRowkey))
@@ -194,29 +227,23 @@ object OnlineRealtimeAnalysis extends Logging{
       nexAlarmtPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_p_" + netFlag + "_lo"), Bytes.toBytes(logoutCnt))
       nexAlarmtPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_p_" + netFlag + "_nlo"), Bytes.toBytes(normalLogoutCnt))
 
-
       val curResKey = companyCode +"_" + servType + "_" + domain + "_" + dataTime.substring(8,12)
       val curResPut = new Put(Bytes.toBytes(curResKey))
       curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_c_" + netFlag + "_li"), Bytes.toBytes(loginCnt))
       curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_c_" + netFlag + "_lo"), Bytes.toBytes(logoutCnt))
       curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_c_" + netFlag + "_nlo"), Bytes.toBytes(normalLogoutCnt))
 
-
-
       val nextResKey = companyCode +"_" + servType + "_" + domain + "_" + nextDataTime.substring(8,12)
       val nextResPut = new Put(Bytes.toBytes(nextResKey))
-      nextResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_p_" + netFlag + "_li"), Bytes.toBytes(loginCnt))
-      nextResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_p_" + netFlag + "_lo"), Bytes.toBytes(logoutCnt))
-      nextResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_p_" + netFlag + "_nlo"), Bytes.toBytes(normalLogoutCnt))
-
-
+      nextResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_p_" + netFlag + "_li"), Bytes.toBytes(loginCnt))
+      nextResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_p_" + netFlag + "_lo"), Bytes.toBytes(logoutCnt))
+      nextResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_p_" + netFlag + "_nlo"), Bytes.toBytes(normalLogoutCnt))
 
       val dayResKey = dataTime.substring(2,8) + "_" + companyCode + "_" + servType + "_" + domain
       val dayResPut = new Put(Bytes.toBytes(dayResKey))
-      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_c_" + netFlag + "_li"), Bytes.toBytes(loginCnt))
-      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_c_" + netFlag + "_lo"), Bytes.toBytes(logoutCnt))
-      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_c_" + netFlag + "_nlo"), Bytes.toBytes(normalLogoutCnt))
-
+      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_c_" + netFlag + "_li"), Bytes.toBytes(loginCnt))
+      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_c_" + netFlag + "_lo"), Bytes.toBytes(logoutCnt))
+      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_c_" + netFlag + "_nlo"), Bytes.toBytes(normalLogoutCnt))
 
       ((new ImmutableBytesWritable, curAlarmPut), (new ImmutableBytesWritable, nexAlarmtPut), (new ImmutableBytesWritable, curResPut), (new ImmutableBytesWritable, nextResPut), (new ImmutableBytesWritable, dayResPut))
     })
@@ -229,6 +256,76 @@ object OnlineRealtimeAnalysis extends Logging{
     HbaseDataUtil.saveRddToHbase(resultDayHtable, resultRDD.map(x=>x._5))
 
 
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //   失败原因写入
+    //
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    val vpdnFailedStatSQL =
+      s"""
+         |select companycode, 'C' as servtype, null as vpdndomain, type, terminatecause as errcode,
+         |count(*) errCnt
+         |from ${radiusTable} c
+         |where isvpdn='1'  and result='f'
+         |group by companycode, type, terminatecause
+         |GROUPING SETS((companycode, terminatecause), (companycode, type, terminatecause), (companycode, type, terminatecause))
+         |union all
+         |select t.companycode, 'C' as servtype, t.vpdndomain, t.type, terminatecause as errcode,
+         |count(*) errCnt
+         |from(
+         |select companycode, c.vpdndomain, type, terminatecause
+         |from
+         |( select companycode, vpdndomain, type, terminatecause
+         |from ${radiusTable} c
+         |where isvpdn='1' and result='f'
+         |) m lateral view explode(split(m.vpdndomain,',')) c as vpdndomain
+         |) t
+         |group by companycode, vpdndomain, type, terminatecause
+         |GROUPING SETS((companycode, vpdndomain, terminatecause), (companycode, vpdndomain, type, terminatecause), (companycode, vpdndomain, type, terminatecause))
+       """.stripMargin
+    val vpdnFailedDF = sqlContext.sql(vpdnFailedStatSQL)
+
+    val commonAndDirectFailedSQL =
+      s"""
+         |select companycode, servtype, null as vpdndomain, type, errcode,
+         |       count(*) errCnt
+         |       from
+         |       (
+         |           select companycode,
+         |                  (case when isdirect='1' then 'D' when iscommon='1' then 'P' else '-1' end) as servtype,
+         |                  type, terminatecause as errcode
+         |           from ${radiusTable} c where result='f'
+         |       ) m
+         |       group by companycode, servtype, type, errcode
+         |       GROUPING SETS((companycode, errcode), (companycode,type, errcode), (companycode, servtype, errcode), (companycode, servtype, type, errcode))
+       """.stripMargin
+
+    val commonAndDirectFailedDF = sqlContext.sql(commonAndDirectFailedSQL).filter("servtype is null or servtype!='-1'")
+
+    val failedDF = vpdnFailedDF.unionAll(commonAndDirectFailedDF)
+
+    val failedRDD = failedDF.coalesce(2).rdd.map(x=>{
+      val companyCode = if(null == x(0)) "-1" else x(0).toString
+      val servType = if(null == x(1)) "-1" else x(1).toString
+      val servFlag = if(servType == "D") "D" else if(servType == "C") "C"  else if(servType == "P") "P"  else "-1"
+      val domain = if(null == x(2)) "-1" else x(2).toString
+      val netType = if(null == x(3)) "-1" else x(3).toString
+      val netFlag = if(netType=="3g") "3" else if(netType=="4g") "4" else "t"
+      val errcode = if(null == x(4)) "-1" else x(4).toString
+      val errCnt = x(5).toString
+      val curResKey = companyCode +"_" + servType + "_" + domain + "_" + dataTime.substring(8,12)
+      val curResPut = new Put(Bytes.toBytes(curResKey))
+      curResPut.addColumn(Bytes.toBytes("e"), Bytes.toBytes("o_" + netFlag + "_" + errcode + "_cnt"), Bytes.toBytes(errCnt))
+
+      val curAlarmRowkey = progRunType + "_" + dataTime.substring(8,12) + "_" + companyCode + "_" + servType + "_" + domain
+      val curAlarmPut = new Put(Bytes.toBytes(curAlarmRowkey))
+      curAlarmPut.addColumn(Bytes.toBytes("e"), Bytes.toBytes("o_" + netFlag + "_" + errcode + "_cnt"), Bytes.toBytes(errCnt))
+
+      ((new ImmutableBytesWritable, curResPut),(new ImmutableBytesWritable, curAlarmPut))
+    })
+    HbaseDataUtil.saveRddToHbase(curResultHtable, failedRDD.map(_._1))
+    HbaseDataUtil.saveRddToHbase(curAlarmHtable, failedRDD.map(_._2))
 
 
   }

@@ -2,7 +2,7 @@ package com.zyuc.stat.iot.analysis.util
 
 import com.zyuc.stat.properties.ConfigProperties
 import org.apache.hadoop.hbase.HBaseConfiguration
-import org.apache.hadoop.hbase.client.{ConnectionFactory, Put}
+import org.apache.hadoop.hbase.client.Put
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable
 import org.apache.hadoop.hbase.mapred.TableOutputFormat
 import org.apache.hadoop.mapred.JobConf
@@ -24,7 +24,6 @@ object HbaseDataUtil {
     */
   def saveRddToHbase(htable: String, rdd:RDD[(ImmutableBytesWritable,Put)]):Unit={
 
-    // hbase配置
     val conf = HBaseConfiguration.create()
     conf.set("hbase.zookeeper.property.clientPort", ConfigProperties.IOT_ZOOKEEPER_CLIENTPORT)
     conf.set("hbase.zookeeper.quorum", ConfigProperties.IOT_ZOOKEEPER_QUORUM)

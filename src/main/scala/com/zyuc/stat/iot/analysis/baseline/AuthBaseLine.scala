@@ -1,6 +1,6 @@
 package com.zyuc.stat.iot.analysis.baseline
 
-import com.zyuc.stat.iot.analysis.util.{AuthHtableConverter, HbaseDataUtil}
+import com.zyuc.stat.iot.analysis.util.{ResultHtableConverter, HbaseDataUtil}
 import com.zyuc.stat.properties.ConfigProperties
 import com.zyuc.stat.utils.{DateUtils, HbaseUtils}
 import org.apache.hadoop.hbase.client.Put
@@ -56,10 +56,10 @@ object AuthBaseLine {
     for(i <- 0 until intervalDayNums){
       val dayid = DateUtils.timeCalcWithFormatConvertSafe(endDayid, "yyyyMMdd", -i*24*60*60, "yyyyMMdd")
       if(i == 0){
-        hbaseDF = AuthHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + dayid)
+        hbaseDF = ResultHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + dayid)
       }
       if(i>0){
-        hbaseDF = hbaseDF.unionAll(AuthHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + dayid))
+        hbaseDF = hbaseDF.unionAll(ResultHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + dayid))
       }
     }
 

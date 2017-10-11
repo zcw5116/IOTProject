@@ -1,6 +1,6 @@
 package com.zyuc.stat.iot.analysis.realtime
 
-import com.zyuc.stat.iot.analysis.util.{AuthHtableConverter, HbaseDataUtil}
+import com.zyuc.stat.iot.analysis.util.{MMEHtableConverter, HbaseDataUtil}
 import com.zyuc.stat.properties.ConfigProperties
 import com.zyuc.stat.utils.{DateUtils, HbaseUtils, MathUtil}
 import org.apache.hadoop.hbase.client.Put
@@ -39,8 +39,8 @@ object MMERealtimeAnalysis extends Logging{
 
     val mmelogTable = sc.getConf.get("spark.app.table.mmelogTable", "iot_mme_log")
 
-    val alarmHtablePre = sc.getConf.get("spark.app.htable.alarmTablePre", "analyze_summ_tab_")
-    val resultHtablePre = sc.getConf.get("spark.app.htable.resultHtablePre", "analyze_summ_rst_everycycle_")
+    val alarmHtablePre = sc.getConf.get("spark.app.htable.alarmTablePre", "analyze_summ_tab_mme_")
+    val resultHtablePre = sc.getConf.get("spark.app.htable.resultHtablePre", "analyze_summ_rst_mme_")
     val resultDayHtable = sc.getConf.get("spark.app.htable.resultDayHtable", "analyze_summ_rst_everyday")
     val analyzeBPHtable = sc.getConf.get("spark.app.htable.analyzeBPHtable", "analyze_bp_tab")
 
@@ -84,8 +84,9 @@ object MMERealtimeAnalysis extends Logging{
     //  curAlarmHtable-当前时刻的预警表,  nextAlarmHtable-下一时刻的预警表,
     val curAlarmHtable = alarmHtablePre + dataTime.substring(0,8)
     val nextAlarmHtable = alarmHtablePre + nextDataTime.substring(0,8)
-    val alarmFamilies = new Array[String](1)
+    val alarmFamilies = new Array[String](2)
     alarmFamilies(0) = "s"
+    alarmFamilies(1) = "e"
     // 创建表, 如果表存在， 自动忽略
     HbaseUtils.createIfNotExists(curAlarmHtable,alarmFamilies)
     HbaseUtils.createIfNotExists(nextAlarmHtable,alarmFamilies)
@@ -287,7 +288,7 @@ object MMERealtimeAnalysis extends Logging{
          |from
          |(
          |    select t.companycode, 'D' as servtype, "-1" as vpdndomain, t.mdn, t.pcause
-         |    from ${mdnTable} t where t.isdirect='1'
+         |    from ${mdnTable} t where t.isdirect='1' and t.result='failed'
          |    union all
          |    select companycode, servtype, c.vpdndomain, mdn, pcause
          |    from
@@ -308,7 +309,7 @@ object MMERealtimeAnalysis extends Logging{
          |group by companycode, servtype, vpdndomain, pcause
        """.stripMargin
 
-    val failedDF = sqlContext.sql(failedSQL).coalesce(1)
+    val failedDF = sqlContext.sql(failedSQL).coalesce(5)
     val failedRDD = failedDF.rdd.map(x=>{
       val companyCode = x(0).toString
       val servType = if(null == x(1)) "-1" else x(1).toString
@@ -316,14 +317,20 @@ object MMERealtimeAnalysis extends Logging{
       val domain = if(null == x(2)) "-1" else x(2).toString
       val netType = "4"
       val netFlag = netType
-      val errcode = if(null == x(3)) "-1" else x(4).toString
+      val errcode = if(null == x(3)) "-1" else x(3).toString
       val errCnt = x(4).toString
       val curResKey = companyCode +"_" + servType + "_" + domain + "_" + dataTime.substring(8,12)
       val curResPut = new Put(Bytes.toBytes(curResKey))
       curResPut.addColumn(Bytes.toBytes("e"), Bytes.toBytes("ma_" + netFlag + "_" + errcode + "_cnt"), Bytes.toBytes(errCnt))
-      (new ImmutableBytesWritable, curResPut)
+
+      val curAlarmRowkey = progRunType + "_" + dataTime.substring(8,12) + "_" + companyCode + "_" + servType + "_" + domain
+      val curAlarmPut = new Put(Bytes.toBytes(curAlarmRowkey))
+      curAlarmPut.addColumn(Bytes.toBytes("e"), Bytes.toBytes("ma_" + netFlag + "_" + errcode + "_cnt"), Bytes.toBytes(errCnt))
+
+      ((new ImmutableBytesWritable, curResPut),(new ImmutableBytesWritable, curAlarmPut))
     })
-    HbaseDataUtil.saveRddToHbase(curResultHtable, failedRDD)
+    HbaseDataUtil.saveRddToHbase(curResultHtable, failedRDD.map(_._1))
+    HbaseDataUtil.saveRddToHbase(curAlarmHtable, failedRDD.map(_._2))
 
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -331,10 +338,10 @@ object MMERealtimeAnalysis extends Logging{
     //  对于每日00:00分的数据需要特殊处理， 在hbase里面00:00分的数据存储的是前一日23:55分至当日00:00分的数据
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
     val preDataTime = DateUtils.timeCalcWithFormatConvertSafe(dataTime, "yyyyMMddHHmm", -5*60, "yyyyMMddHHmm")
-    val curHbaseDF = AuthHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + preDataTime.substring(0, 8))
+    val curHbaseDF = MMEHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + preDataTime.substring(0, 8))
     var resultDF = curHbaseDF.filter("time>='0005'")
     if(preDataTime.substring(0, 8) != dataTime.substring(0, 8)){
-      val nextHbaseDF = AuthHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + dataTime.substring(0, 8))
+      val nextHbaseDF = MMEHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + dataTime.substring(0, 8))
       if(nextHbaseDF!=null){
         resultDF = resultDF.unionAll(nextHbaseDF.filter("time='0000'"))
       }
@@ -344,7 +351,7 @@ object MMERealtimeAnalysis extends Logging{
     val accumDF = resultDF.groupBy("compnyAndSerAndDomain").agg(
       sum("ma_c_4_rn").as("req_4g_sum"),sum("ma_c_4_sn").as("req_4g_succ_sum"))
 
-    val accumRDD = accumDF.coalesce(1).rdd.map(x=>{
+    val accumRDD = accumDF.repartition(10).rdd.map(x=>{
       val rkey = preDataTime.substring(2, 8) + "_" + x(0).toString
       val dayResPut = new Put(Bytes.toBytes(rkey))
       val req_4g_sum = x(1).toString
@@ -365,12 +372,12 @@ object MMERealtimeAnalysis extends Logging{
     //
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
     val hisDataTime = DateUtils.timeCalcWithFormatConvertSafe(dataTime, "yyyyMMddHHmm", -hisDayNum*24*60*60, "yyyyMMddHHmm")
-    val hisDF = AuthHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + hisDataTime.substring(0, 8)).filter("time='" + hisDataTime.substring(8, 12) + "'")
+    val hisDF = MMEHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + hisDataTime.substring(0, 8)).filter("time='" + hisDataTime.substring(8, 12) + "'")
 
     if(hisDF != null){
       val hisResDF = hisDF.select("compnyAndSerAndDomain", "ma_c_4_rn", "ma_c_4_sn", "ma_c_4_rat")
 
-      val hisResRDD = hisResDF.rdd.map(x=>{
+      val hisResRDD = hisResDF.repartition(10).rdd.map(x=>{
         val rkey = dataTime.substring(2, 8) + "_" + x(0).toString
         val req_4g_cnt = x(1).toString
         val req_succ_4g_cnt = x(2).toString

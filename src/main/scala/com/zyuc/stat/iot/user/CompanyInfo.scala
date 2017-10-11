@@ -16,6 +16,7 @@ import org.apache.spark.sql.types.StringType
 /**
   * Created by zhoucw on 17-8-29.
   * 1000 200 200C
+  * @deprecated
   */
 object CompanyInfo extends Logging{
 

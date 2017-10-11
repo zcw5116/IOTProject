@@ -1,8 +1,9 @@
 package com.zyuc.stat.iot.user
 
-import com.zyuc.stat.iot.user.UserOnlineBaseData.logError
+import com.zyuc.stat.iot.user.UserOnlineBaseData.{logError, logInfo}
 import com.zyuc.stat.properties.ConfigProperties
 import com.zyuc.stat.utils.DateUtils.timeCalcWithFormatConvertSafe
+import com.zyuc.stat.utils.HbaseUtils
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.apache.spark.sql.hive.HiveContext
@@ -26,7 +27,7 @@ object OnlineBase extends Logging{
     val pdsnTable = sc.getConf.get("spark.app.table.pdsnTable", "iot_cdr_data_pdsn")
     val pgwTable = sc.getConf.get("spark.app.table.pgwTable", "iot_cdr_data_pgw")
     val haccgTable = sc.getConf.get("spark.app.table.haccgTable", "iot_cdr_data_haccg")
-    val basenumTable = sc.getConf.get("spark.app.table.basenumTable", "iot_useronline_base_nums")
+    val basenumTable = sc.getConf.get("spark.app.table.basenumTable", "iot_useronline_basedata")
     val ifUpdateBaseDataTime = sc.getConf.get("spark.app.ifUpdateBaseDataTime", "Y")
     val outputPath = sc.getConf.get("spark.app.outputPath", "/hadoop/IOT/ANALY_PLATFORM/UserOnline/") //
 
@@ -255,9 +256,20 @@ object OnlineBase extends Logging{
          |group by companycode, servtype, vpdndomain, type
          |GROUPING SETS (companycode,(companycode, type),(companycode, servtype),(companycode, servtype, vpdndomain), (companycode, servtype, type), (companycode, servtype, vpdndomain, type))
        """.stripMargin)
-    statResultDF.filter("vpdndomain is null or vpdndomain!='-1'").repartition(1).write.format("orc").mode(SaveMode.Overwrite).save(outputPath + "temp/" + curHourtime)
 
 
+    val partitionD = curHourtime.substring(2,10)
+    statResultDF.filter("vpdndomain is null or vpdndomain!='-1'").repartition(1).write.format("orc").mode(SaveMode.Overwrite).save(outputPath + "data/d=" + partitionD)
+
+    val sql = s"alter table ${basenumTable} add IF NOT EXISTS partition(d='$partitionD')"
+    logInfo("sql:" + sql)
+    sqlContext.sql(sql)
+
+    // 写入hbase表
+    if(ifUpdateBaseDataTime == "Y"){
+      logInfo("write whetherUpdateBaseDataTime to Hbase Table. ")
+      HbaseUtils.updateCloumnValueByRowkey("iot_dynamic_data","rowkey001","onlinebase","baseHourid", curHourtime) // 从habase里面获取
+    }
 
     ///////////////////////////////////////////////////////////////////////////////////////
     //   根据业务统计在线用户数

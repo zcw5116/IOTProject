@@ -49,7 +49,7 @@ object RadiusReceive extends GetProperties {
     // 配置信息
     val kafkaParams = Map[String, String]("metadata.broker.list" -> prop.getProperty("kafka.metadata.broker.list"))
     // 获取topic和partition参数
-    val groupName = "haradiusToHive"
+    val groupName = "haradiusToHive1"
     // 获取kafkaStream
     val kafkaStream = SparkKafkaUtils.createDirectKafkaStream(ssc, kafkaParams, zkClient, topics, groupName)
 
