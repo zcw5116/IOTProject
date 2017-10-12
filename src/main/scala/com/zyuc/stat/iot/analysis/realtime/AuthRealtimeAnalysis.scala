@@ -115,7 +115,7 @@ object AuthRealtimeAnalysis extends Logging{
     //   cache table
     ///////////////////////////////////////////////////////////////
     val userInfoTableCached = "userInfoTableCached"
-    sqlContext.sql(s"cache table ${userInfoTableCached} as select mdn, imsicdma, companycode, vpdndomain, isvpdn, isdirect from $userInfoTable where d=$userTableDataDayid")
+    sqlContext.sql(s"cache table ${userInfoTableCached} as select mdn, imsicdma, companycode, vpdndomain, isvpdn, isdirect, iscommon from $userInfoTable where d=$userTableDataDayid")
 
     //val userAndDomainTableCached = "userAndDomainTableCached"
     //sqlContext.sql(s"cache table ${userAndDomainTableCached} as select mdn, companycode, isvpdn, vpdndomain from $userAndDomainTable where d=$userTableDataDayid")

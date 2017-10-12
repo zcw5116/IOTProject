@@ -52,11 +52,7 @@ object UserInfoProcess {
     val crttime = DateUtils.getNowTime("yyyy-MM-dd HH:mm:ss")
 
 
-    val apnMap = new mutable.HashMap[String, String]()
-    val vpnToApnRDD = sqlContext.read.format("text").load(vpnToApnMapFile).map(x=>x.getString(0).split(","))
-    vpnToApnRDD.collect().foreach(x=>
-      apnMap.+=(x(0)->x(1))
-    )
+
 
     val textDF = sqlContext.read.format("text").load(fileLocation)
 
@@ -74,7 +70,7 @@ object UserInfoProcess {
       val domainList = vpdndomain.split(",")
       val domainSet = new mutable.HashSet[Tuple19[String, String, String,String, String, String, String, String, String,String, String, String, String, String, String, String, String, String, String]]
       domainList.foreach(e=>{
-        val apn = apnMap.get(e).mkString
+        val apn = "-1"
         domainSet.+=((line(0).toString,line(1).toString,line(2).toString,line(3).toString,e, apn, line(5).toString,line(6).toString,line(7).toString,line(8).toString,
           line(9).toString,line(10).toString,line(11).toString,line(12).toString,line(13).toString,line(14).toString,line(15).toString,line(16).toString,line(17).toString))
       })

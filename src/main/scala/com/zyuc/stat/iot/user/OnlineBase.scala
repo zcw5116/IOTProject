@@ -29,18 +29,13 @@ object OnlineBase extends Logging{
     val haccgTable = sc.getConf.get("spark.app.table.haccgTable", "iot_cdr_data_haccg")
     val basenumTable = sc.getConf.get("spark.app.table.basenumTable", "iot_useronline_basedata")
     val ifUpdateBaseDataTime = sc.getConf.get("spark.app.ifUpdateBaseDataTime", "Y")
-    val outputPath = sc.getConf.get("spark.app.outputPath", "/hadoop/IOT/ANALY_PLATFORM/UserOnline/") //
+    val outputPath = sc.getConf.get("spark.app.outputPath", "/hadoop/IOT/data/online/baseData/") //
 
     if(ifUpdateBaseDataTime != "Y" && ifUpdateBaseDataTime != "N" ){
       logError("ifUpdateBaseDataTime类型错误错误, 期望值：Y, N ")
       return
     }
 
-    val vpnToApnMapFile = sc.getConf.get("spark.app.vpnToApnMapFile", "/hadoop/IOT/ANALY_PLATFORM/BasicData/VpdnToApn/vpdntoapn.txt")
-    import  sqlContext.implicits._
-    val vpnToApnDF  = sqlContext.read.format("text").load(vpnToApnMapFile).map(x=>x.getString(0).split(",")).map(x=>(x(0),x(1))).toDF("vpdndomain","apn")
-    val vpdnAndApnTable = "vpdnAndApnTable"
-    vpnToApnDF.registerTempTable(vpdnAndApnTable)
 
 
     // date related to haccg & pdsn
@@ -70,27 +65,24 @@ object OnlineBase extends Logging{
     ///////////////////////////////////////////////////////////////////////////////////////
     var pdsnMdn =
       s"""
-         |select t.mdn, regexp_replace(t.nai,'.*@','') as vpdndomain, t.account_session_id, t.acct_status_type
+         |select t.mdn, t.account_session_id, t.acct_status_type
          |from ${pdsnTable} t
          |where t.d='${dayidOflast7Hourtime}'
          |      and t.h>='${last7Hourid}' and t.h<'${curHourid}'
-         |      and t.source_ip_address='0.0.0.0'
        """.stripMargin
 
     if(dayidOfCurHourtime>dayidOflast7Hourtime){
       pdsnMdn =
         s"""
-           |select t.mdn, regexp_replace(t.nai,'.*@','') as vpdndomain, t.account_session_id, t.acct_status_type
+           |select t.mdn, t.account_session_id, t.acct_status_type
            |from ${pdsnTable} t
            |where t.d='${dayidOflast7Hourtime}'
            |      and t.h>='${last7Hourid}'
-           |      and t.source_ip_address='0.0.0.0'
            |union all
-           |select t.mdn, regexp_replace(t.nai,'.*@','') as vpdndomain, t.account_session_id, t.acct_status_type
+           |select t.mdn, t.account_session_id, t.acct_status_type
            |from ${pdsnTable} t
            |where t.d='${dayidOfCurHourtime}'
            |      and t.h<'${curHourid}'
-           |      and t.source_ip_address='0.0.0.0'
        """.stripMargin
     }
 
@@ -131,6 +123,7 @@ object OnlineBase extends Logging{
     sqlContext.sql(haccgMdn).registerTempTable(tmpHaccgTable)
     sqlContext.cacheTable(tmpHaccgTable)
 
+
     ///////////////////////////////////////////////////////////////////////////////////////
     //  pgw清单
     //
@@ -166,10 +159,10 @@ object OnlineBase extends Logging{
     ///////////////////////////////////////////////////////////////////////////////////////
     val pdsnOnlineMDNTmp =
       s"""
-         |select distinct r.mdn, r.vpdndomain from
+         |select distinct r.mdn from
          |(
-         |    select t1.mdn, t1.vpdndomain, t2.mdn as mdn2 from
-         |        (select mdn, vpdndomain, account_session_id from ${tmpPdsnTable} l1 where l1.acct_status_type<>'2') t1
+         |    select t1.mdn, t2.mdn as mdn2 from
+         |        (select mdn, account_session_id from ${tmpPdsnTable} l1 where l1.acct_status_type<>'2') t1
          |    left join
          |        (select mdn, account_session_id from ${tmpPdsnTable} l2 where l2.acct_status_type='2' ) t2
          |    on(t1.mdn=t2.mdn and t1.account_session_id=t2.account_session_id)
@@ -195,6 +188,26 @@ object OnlineBase extends Logging{
     val haccgMDNTmpTable = "haccgMDNTmpTable_" + curHourtime
     sqlContext.sql(haccgOnlineMdnTmp).registerTempTable(haccgMDNTmpTable)
 
+
+    ///////////////////////////////////////////////////////////////////////////////////////
+    //  所有3g在线号码清单
+    //
+    ///////////////////////////////////////////////////////////////////////////////////////
+    val g3OnlineMdnTmp = sqlContext.sql(
+      s"""
+         |select distinct mdn
+         |from
+         |(
+         |    select mdn from ${pdsnMDNTmpTable}
+         |    union all
+         |    select mdn from ${haccgMDNTmpTable}
+         |) t
+       """.stripMargin)
+    val g3MDMTmpTable = "g3MDMTmpTable_" + curHourtime
+    g3OnlineMdnTmp.registerTempTable(g3MDMTmpTable)
+
+
+
     // 统计时间点的时间转换
     val timeOfFirstUsageStr = timeCalcWithFormatConvertSafe(curHourtime, "yyyyMMddHH",0, "yyyy-MM-dd HH:mm:ss")
 
@@ -207,59 +220,71 @@ object OnlineBase extends Logging{
 
 
 
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////
-    //  tongji
-    //
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    val statSQL =
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////
+    //  统计
+    //1. vpdn业务
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////
+    val vpdnStatSQL =
       s"""
-         |select companycode, mdn, servtype, c.vpdndomain, type
+         |select u.companycode, 'C' as servtype, null as vpdndomain, type, count(*) as usrcnt
+         |from ${userInfoTableCached} u,
+         |(
+         |    select mdn, '3g' as type from ${pdsnMDNTmpTable}
+         |    union all
+         |    select mdn, '4g' as type from ${haccgMDNTmpTable}
+         |) t where u.mdn = t.mdn and u.isvpdn='1'
+         |group by companycode, type
+         |GROUPING SETS (companycode, (companycode, type))
+         |union all
+         |select companycode, 'C' as servtype, vpdndomain, type, count(*) as usrcnt
          |from
          |(
-         |    select   p.mdn, u.companycode, 'C' as servtype,
-         |           (case when array_contains(split(u.vpdndomain,','), p.vpdndomain) then p.vpdndomain else u.vpdndomain end) as vpdndomains,
-         |           '3g' type
-         |    from ${pdsnMDNTmpTable} p, ${userInfoTableCached} u
-         |    where p.mdn = u.mdn and u.isvpdn='1'
-         |) m lateral view explode(split(m.vpdndomains,',')) c as vpdndomain
-         |union all
-         |select u.companycode, a.mdn,
-         |       (case when u.isdirect=1 then 'D' else 'P' end) as servtype,
-         |       '-1'  as vpdndomain, '3g' type
-         |from ${haccgMDNTmpTable} a, ${userInfoTableCached} u
-         |where u.mdn = a.mdn
-         |union all
-         |select companycode,mdn,
-         |(case when u.isdirect='1' then 'D' when u.isvpdn=1 and array_contains(split(u.vpdndomain,','), d.vpdndomain) then 'C' else 'P' end) as servtype,
-         |(case when u.isdirect!='1' and array_contains(split(u.vpdndomain,','), d.vpdndomain) then d.vpdndomain else '-1' end)  as vpdndomain,
-         |'4g' type
-         |from
-         |(
-         |    select t.mdn, p.apn, t.companycode, t.vpdndomain, t.isdirect, t.isvpdn
-         |    from  ${pgwMDNTmpTable} p, ${userInfoTableCached} t
-         |    where p.mdn = t.mdn
-         |) u left join ${vpdnAndApnTable} d
-         |on(u.apn = d.apn and array_contains(split(u.vpdndomain,','),d.vpdndomain) )
+         |    select m.companycode, c.vpdndomain, m.type from
+         |    (
+         |        select u.companycode, u.vpdndomain, t.type
+         |        from
+         |             ${userInfoTableCached} u,
+         |             (
+         |                 select mdn, '3g' as type from ${pdsnMDNTmpTable}
+         |                 union all
+         |                 select mdn, '4g' as type from ${haccgMDNTmpTable}
+         |             )  t
+         |        where u.mdn = t.mdn  and u.isvpdn='1'
+         |    ) m lateral view explode(split(m.vpdndomain,',')) c as vpdndomain
+         |)  p
+         |group by companycode, vpdndomain, type
+         |GROUPING SETS ((companycode, vpdndomain), (companycode, vpdndomain, type))
        """.stripMargin
 
-    val  statDF = sqlContext.sql(statSQL)
-    val statDFTable = "statDFTable_" + curHourtime
-    statDF.registerTempTable(statDFTable)
+    val vpdnDF = sqlContext.sql(vpdnStatSQL)
 
+    val commonAndDirectSQL =
+      s"""select companycode, servtype, null as vpdndomain, type,
+         |count(*) as usrcnt
+         |from
+         |(
+         |    select u.companycode,
+         |           (case when isdirect='1' then 'D' when iscommon='1' then 'P' else '-1' end) as servtype, '3g' as type
+         |    from  ${userInfoTableCached} u, ${g3MDMTmpTable} t
+         |    where u.mdn = t.mdn
+         |    union all
+         |    select u.companycode,
+         |           (case when isdirect='1' then 'D' when iscommon='1' then 'P' else '-1' end) as servtype, '4g' as type
+         |    from  ${userInfoTableCached} u, ${pgwMDNTmpTable} t
+         |    where u.mdn = t.mdn
+         |) s
+         |group by companycode, servtype, type
+         |GROUPING SETS (companycode, (companycode, servtype), (companycode, type), (companycode, servtype, type))
+       """.stripMargin
 
-    val statResultDF = sqlContext.sql(
-      s"""
-         |select companycode, servtype, vpdndomain, type,
-         |       count(*) as usercnt
-         |from ${statDFTable}  m
-         |group by companycode, servtype, vpdndomain, type
-         |GROUPING SETS (companycode,(companycode, type),(companycode, servtype),(companycode, servtype, vpdndomain), (companycode, servtype, type), (companycode, servtype, vpdndomain, type))
-       """.stripMargin)
+    val commonAndDirectDF = sqlContext.sql(commonAndDirectSQL).filter("servtype is null or servtype!='-1'")
+
+    val resultDF = vpdnDF.unionAll(commonAndDirectDF)
 
 
     val partitionD = curHourtime.substring(2,10)
-    statResultDF.filter("vpdndomain is null or vpdndomain!='-1'").repartition(1).write.format("orc").mode(SaveMode.Overwrite).save(outputPath + "data/d=" + partitionD)
+    resultDF.repartition(1).write.format("orc").mode(SaveMode.Overwrite).save(outputPath + "data/d=" + partitionD)
 
     val sql = s"alter table ${basenumTable} add IF NOT EXISTS partition(d='$partitionD')"
     logInfo("sql:" + sql)

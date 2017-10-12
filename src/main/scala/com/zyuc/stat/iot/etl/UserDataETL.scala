@@ -40,7 +40,7 @@ object UserDataETL {
     val companyAndDomainTable = sc.getConf.get("spark.app.companyAndDomainTable", "iot_basic_company_and_domain")
 
     val provinceMapcodeFile = sc.getConf.get("spark.app.provinceMapcodeFile", "/hadoop/IOT/ANALY_PLATFORM/BasicData/iotDimMapcodeProvince/iot_dim_mapcode_province.txt")
-    val vpnToApnMapFile = sc.getConf.get("spark.app.vpnToApnMapFile", "/hadoop/IOT/ANALY_PLATFORM/BasicData/VpdnToApn/vpdntoapn.txt")
+    // val vpnToApnMapFile = sc.getConf.get("spark.app.vpnToApnMapFile", "/hadoop/IOT/ANALY_PLATFORM/BasicData/VpdnToApn/vpdntoapn.txt")
 
 
     //val outputPath = "/hadoop/IOT/ANALY_PLATFORM/BasicData/output/UserInfo/"
@@ -52,12 +52,21 @@ object UserDataETL {
     val crttime = DateUtils.getNowTime("yyyy-MM-dd HH:mm:ss")
 
 
+    val tmpFileTable = "tmpFileTable_" + dataDayid
     val sourceDF = sqlContext.read.format("text").load(fileLocation)
-    var userDF = sqlContext.createDataFrame(sourceDF.map(x => UserInfoConverterUtils.parseLine(x.getString(0))).filter(_.length != 1), UserInfoConverterUtils.struct)
+    val sourceFileDF = sqlContext.createDataFrame(sourceDF.map(x => UserInfoConverterUtils.parseLine(x.getString(0))).filter(_.length != 1), UserInfoConverterUtils.struct)
+    sourceFileDF.registerTempTable(tmpFileTable)
+    val fileUserDF = sqlContext.sql(
+      s"""
+         |select mdn, imsicdma, imsilte, companycode, vpdndomain, isvpdn, isdirect, userstatus, atrbprovince,
+         |       userprovince, belo_city, belo_prov, custstatus, custtype, prodtype,internetType,vpdnOnly,isCommon
+         |from ${tmpFileTable}
+       """.stripMargin)
+    var userDF = fileUserDF
 
     if(syncType == "incr"){
       // 用户表， 是否定向业务， 是否vpdn业务
-      val incrUserDF = sqlContext.createDataFrame(sourceDF.map(x => UserInfoConverterUtils.parseLine(x.getString(0))).filter(_.length != 1), UserInfoConverterUtils.struct)
+      val incrUserDF = fileUserDF
       val incrUserTable = "incrUserTable_" + dataDayid
       incrUserDF.registerTempTable(incrUserTable)
 
@@ -66,7 +75,7 @@ object UserDataETL {
       sqlContext.sql(
         s"""
            |select mdn, imsicdma, imsilte, companycode, vpdndomain, isvpdn, isdirect, userstatus, atrbprovince,
-           |       userprovince, belo_city, belo_prov, custstatus, custtype, prodtype,internetType,vpdnOnly,isCommon
+           |       userprovince, belo_city, belo_prov, custstatus, custtype, prodtype, internetType, vpdnOnly, isCommon
            |from ${userInfoTable}
            |where d='${userPrePartionD}'
        """.stripMargin).registerTempTable(preDayUserTable)

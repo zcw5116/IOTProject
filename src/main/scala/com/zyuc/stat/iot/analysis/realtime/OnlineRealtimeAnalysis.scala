@@ -187,7 +187,7 @@ object OnlineRealtimeAnalysis extends Logging{
          |select companycode, servtype, null as vpdndomain, type,
          |       sum(case when status='Start' then 1 else 0 end) logincnt,
          |       sum(case when status='Stop' then 1 else 0 end) logoutcnt,
-         |       sum(case when status='Stop' and result='f' then 1 else 0 end) normallogoutcnt
+         |       sum(case when status='Stop' and result='s' then 1 else 0 end) normallogoutcnt
          |       from
          |       (
          |           select companycode,

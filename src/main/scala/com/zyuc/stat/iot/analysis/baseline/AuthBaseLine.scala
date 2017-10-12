@@ -1,6 +1,6 @@
 package com.zyuc.stat.iot.analysis.baseline
 
-import com.zyuc.stat.iot.analysis.util.{ResultHtableConverter, HbaseDataUtil}
+import com.zyuc.stat.iot.analysis.util.{AuthHtableConverter, HbaseDataUtil}
 import com.zyuc.stat.properties.ConfigProperties
 import com.zyuc.stat.utils.{DateUtils, HbaseUtils}
 import org.apache.hadoop.hbase.client.Put
@@ -24,26 +24,29 @@ object AuthBaseLine {
     sqlContext.sql("use " + ConfigProperties.IOT_HIVE_DATABASE)
 
     val appName = sc.getConf.get("spark.app.name") // name_2017073111
-    val endDayid = sc.getConf.get("spark.app.baseLine.endDayid","20170929") // "20170906"
-    val intervalDayNums = sc.getConf.get("spark.app.baseLine.intervalDayNums","3").toInt // “7”
+    val endDayid = sc.getConf.get("spark.app.baseLine.endDayid","20171012") // "20170906"
+    val dayM5Time = sc.getConf.get("spark.app.baseLine.dayM5Time","1900")
+    val intervalDayNums = sc.getConf.get("spark.app.baseLine.intervalDayNums","1").toInt //
+    val modeName = sc.getConf.get("spark.app.baseLine.modeName","auth") // auth mme flow online
     val alarmHtablePre = sc.getConf.get("spark.app.htable.alarmTablePre", "analyze_summ_tab_")
-    val resultHtablePre = sc.getConf.get("spark.app.htable.resultHtablePre", "analyze_summ_rst_everycycle_")
+    val resultHtablePre = sc.getConf.get("spark.app.htable.resultHtablePre", "analyze_summ_rst_")
     val targetdayid = sc.getConf.get("spark.app.htable.targetdayid")
-
+    val progRunType = sc.getConf.get("spark.app.progRunType", "0")
 
     /////////////////////////////////////////////////////////////////////////////////////////
     //  Hbase 相关的表
     //  表不存在， 就创建
     /////////////////////////////////////////////////////////////////////////////////////////
     //  alarmHtable-预警表
-    val alarmHtable = alarmHtablePre + targetdayid
-    val alarmFamilies = new Array[String](1)
+    val alarmHtable = alarmHtablePre + modeName + "_" + targetdayid
+    val alarmFamilies = new Array[String](2)
     alarmFamilies(0) = "s"
+    alarmFamilies(1) = "e"
     // 创建表, 如果表存在， 自动忽略
     HbaseUtils.createIfNotExists(alarmHtable,alarmFamilies)
 
     //  resultHtable-结果表,
-    val resultHtable = resultHtablePre + targetdayid
+    val resultHtable = resultHtablePre + modeName + "_" + targetdayid
     val resultFamilies = new Array[String](2)
     resultFamilies(0) = "s"
     resultFamilies(1) = "e"
@@ -53,13 +56,18 @@ object AuthBaseLine {
 
     // 将每天的Hbase数据union all后映射为一个DataFrame
     var hbaseDF:DataFrame = null
-    for(i <- 0 until intervalDayNums){
+    for(i <- 0 until intervalDayNums + 1){
       val dayid = DateUtils.timeCalcWithFormatConvertSafe(endDayid, "yyyyMMdd", -i*24*60*60, "yyyyMMdd")
       if(i == 0){
-        hbaseDF = ResultHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + dayid)
+        println("1")
+        hbaseDF = AuthHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + modeName + "_" + dayid).filter(s"time<'${dayM5Time}'")
       }
-      if(i>0){
-        hbaseDF = hbaseDF.unionAll(ResultHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + dayid))
+      if(i== intervalDayNums){
+        println("2")
+        hbaseDF = hbaseDF.unionAll(AuthHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + modeName + "_" + dayid).filter(s"time>='${dayM5Time}'"))
+      }
+      else if(i>1){
+        hbaseDF = hbaseDF.unionAll(AuthHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + modeName + "_" + dayid))
       }
     }
 
@@ -121,7 +129,7 @@ object AuthBaseLine {
 
     // 如果天数N不大于2， 那么无需去掉最大值和最小值
     if(intervalDayNums <= 2){
-      var aggSQL =
+      aggSQL =
         s"""
            |select compnyAndSerAndDomain, time,
            |sum(a_c_3_rat)/${intervalDayNums} as a_b_3_rat,
@@ -156,12 +164,10 @@ object AuthBaseLine {
       val a_b_v_crat = x(8).toString
       val a_b_t_crat = x(9).toString
 
-      val alramkey0 = "0" + "_" + time + "_" + companyAndDomain
-      val alramkey1 = "0" + "_" + time + "_" + companyAndDomain
+      val alramkey0 = progRunType + "_" + time + "_" + companyAndDomain
       val resultkey = companyAndDomain + "_" + time
 
       val putAlarm0 = new Put(Bytes.toBytes(alramkey0))
-      val putAlarm1 = new Put(Bytes.toBytes(alramkey1))
       val resultPut = new Put(Bytes.toBytes(resultkey))
 
       putAlarm0.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_3_rat"), Bytes.toBytes(a_b_3_rat))
@@ -173,14 +179,6 @@ object AuthBaseLine {
       putAlarm0.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_v_crat"), Bytes.toBytes(a_b_v_crat))
       putAlarm0.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_t_crat"), Bytes.toBytes(a_b_t_crat))
 
-      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_3_rat"), Bytes.toBytes(a_b_3_rat))
-      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_4_rat"), Bytes.toBytes(a_b_4_rat))
-      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_v_rat"), Bytes.toBytes(a_b_v_rat))
-      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_t_rat"), Bytes.toBytes(a_b_t_rat))
-      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_3_crat"), Bytes.toBytes(a_b_3_crat))
-      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_4_crat"), Bytes.toBytes(a_b_4_crat))
-      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_v_crat"), Bytes.toBytes(a_b_v_crat))
-      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_t_crat"), Bytes.toBytes(a_b_t_crat))
 
       resultPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_3_rat"), Bytes.toBytes(a_b_3_rat))
       resultPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_4_rat"), Bytes.toBytes(a_b_4_rat))
@@ -191,13 +189,12 @@ object AuthBaseLine {
       resultPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_v_crat"), Bytes.toBytes(a_b_v_crat))
       resultPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_t_crat"), Bytes.toBytes(a_b_t_crat))
 
-      ((new ImmutableBytesWritable, putAlarm0), (new ImmutableBytesWritable, putAlarm1), (new ImmutableBytesWritable, resultPut))
+      ((new ImmutableBytesWritable, putAlarm0), (new ImmutableBytesWritable, resultPut))
     })
 
 
     HbaseDataUtil.saveRddToHbase(alarmHtable, resultRDD.map(x=>x._1))
-    HbaseDataUtil.saveRddToHbase(alarmHtable, resultRDD.map(x=>x._2))
-    HbaseDataUtil.saveRddToHbase(resultHtable, resultRDD.map(x=>x._3))
+    HbaseDataUtil.saveRddToHbase(resultHtable, resultRDD.map(x=>x._2))
 
 
 

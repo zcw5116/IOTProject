@@ -121,7 +121,7 @@ object SMSGRealtimeAnalysis extends Logging{
        |select u.mdn, u.companycode, u.vpdndomain, 's' type, u.isdirect, u.isvpdn, u.iscommon
        |from  ${userInfoTableCached} u, ${smsglogTable} m
        |where m.d = '${partitionD}'  and m.h = '${partitionH}' and m.m5='${partitionM5}'
-       |      and u.mdn = m.called_number
+       |      and u.mdn = m.calling_number
        """.stripMargin
 
 
@@ -270,9 +270,9 @@ object SMSGRealtimeAnalysis extends Logging{
       val ms_c_s_n = x(2).toString
       val ms_c_t_n = x(3).toString
 
-      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("ms_c_r_n"), Bytes.toBytes(ms_c_r_n))
-      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("ms_c_s_n"), Bytes.toBytes(ms_c_s_n))
-      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("ms_c_t_n"), Bytes.toBytes(ms_c_s_n))
+      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("ms_d_r_n"), Bytes.toBytes(ms_c_r_n))
+      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("ms_d_s_n"), Bytes.toBytes(ms_c_s_n))
+      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("ms_d_t_n"), Bytes.toBytes(ms_c_t_n))
 
       (new ImmutableBytesWritable, dayResPut)
     })
