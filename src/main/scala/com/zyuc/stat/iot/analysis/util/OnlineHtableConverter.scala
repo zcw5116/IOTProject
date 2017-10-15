@@ -64,7 +64,6 @@ object OnlineHtableConverter extends Logging {
       val o_c_4_on = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("o_c_4_on")))
       val o_c_t_on = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("o_c_t_on")))
 
-
       Row(
         rkey,
         compnyAndSerAndDomain,
@@ -88,7 +87,6 @@ object OnlineHtableConverter extends Logging {
 
     }catch {
       case e:Exception => {
-        logError("ParseError rowkey: [" + Bytes.toString(row._2.getRow) + "] msg[" + e.getMessage + "]")
         Row("0")
       }
     }

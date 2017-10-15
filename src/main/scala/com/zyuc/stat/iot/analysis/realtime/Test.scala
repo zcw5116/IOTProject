@@ -9,13 +9,14 @@ import org.apache.hadoop.hbase.util.Bytes
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{Logging, SparkConf, SparkContext}
+import com.zyuc.stat.utils.DateUtils.timeCalcWithFormatConvertSafe
 
 import scala.collection.mutable
 
 /**
   * Created by zhoucw on 17-10-8.
   */
-object OnlineRealtimeSumAnalysis extends Logging{
+object Test extends Logging{
   def main(args: Array[String]): Unit = {
     val sparkConf = new SparkConf()
     val sc = new SparkContext(sparkConf)
@@ -123,9 +124,66 @@ object OnlineRealtimeSumAnalysis extends Logging{
 
     // 获取间隔的天数
     val intervalDay = DateUtils.timeInterval(beginDay, endDay, "yyyyMMdd") / (24 * 60 * 60)
-
-
     var hbaseDF: DataFrame = null
+    val targetdayid="20171012"
+    hbaseDF = OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + "20171013")
+    hbaseDF.registerTempTable("onlinetest")
+    val resultDFs = sqlContext.sql(
+      s"""
+         |select compnyAndSerAndDomain, time, o_c_3_li, o_c_3_lo, o_c_3_nlo, o_c_4_li, o_c_4_lo,
+         |o_c_4_nlo, o_c_t_li, o_c_t_lo, o_c_t_nlo, o_c_3_on, o_c_4_on, o_c_t_on
+         |from onlinetest where time<='0700'
+       """.stripMargin)
+
+    val resultRDDs = resultDFs.coalesce(1).rdd.map(x=>{
+      val compnyAndSerAndDomain = x(0)
+      val time=x(1).toString
+      val targetTime = timeCalcWithFormatConvertSafe(time, "HHmm", 10*60*60, "HHmm")
+
+      val o_c_3_li = x(2).toString
+      val o_c_3_lo = x(3).toString
+      val o_c_3_nlo = x(4).toString
+      val o_c_4_li = x(5).toString
+      val o_c_4_lo = x(6).toString
+
+      val o_c_4_nlo = x(7).toString
+      val o_c_t_li = x(8).toString
+      val o_c_t_lo = x(9).toString
+      val o_c_t_nlo = x(10).toString
+      val o_c_3_on = x(11).toString
+
+      val o_c_4_on  = x(12).toString
+      val o_c_t_on  = x(13).toString
+
+      val rowkey = compnyAndSerAndDomain + "_" + targetTime
+      val curResPut = new Put(Bytes.toBytes(rowkey))
+
+      curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_c_3_li"), Bytes.toBytes(o_c_3_li))
+      curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_c_3_lo"), Bytes.toBytes(o_c_3_lo))
+      curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_c_3_nlo"), Bytes.toBytes(o_c_3_nlo))
+      curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_c_4_li"), Bytes.toBytes(o_c_4_li))
+      curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_c_4_lo"), Bytes.toBytes(o_c_4_lo))
+
+      curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_c_4_nlo"), Bytes.toBytes(o_c_4_nlo))
+      curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_c_t_li"), Bytes.toBytes(o_c_t_li))
+      curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_c_t_lo"), Bytes.toBytes(o_c_t_lo))
+      curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_c_t_nlo"), Bytes.toBytes(o_c_t_nlo))
+      curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_c_3_on"), Bytes.toBytes(o_c_3_on))
+
+      curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_c_4_on"), Bytes.toBytes(o_c_4_on))
+      curResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_c_t_on"), Bytes.toBytes(o_c_t_on))
+
+      (new ImmutableBytesWritable, curResPut)
+
+    })
+
+    val targetTable = "analyze_summ_rst_online_20171012"
+
+    HbaseDataUtil.saveRddToHbase(targetTable, resultRDDs)
+
+
+
+
     for (i <- 0 to intervalDay.toInt) {
       val dayid = DateUtils.timeCalcWithFormatConvertSafe(beginDay, "yyyyMMdd", i * 24 * 60 * 60, "yyyyMMdd")
       if (i == 0) {
