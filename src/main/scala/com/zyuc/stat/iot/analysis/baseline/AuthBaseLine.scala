@@ -31,7 +31,7 @@ object AuthBaseLine {
     val alarmHtablePre = sc.getConf.get("spark.app.htable.alarmTablePre", "analyze_summ_tab_")
     val resultHtablePre = sc.getConf.get("spark.app.htable.resultHtablePre", "analyze_summ_rst_")
     val targetdayid = sc.getConf.get("spark.app.htable.targetdayid")
-    val progRunType = sc.getConf.get("spark.app.progRunType", "0")
+    // val progRunType = sc.getConf.get("spark.app.progRunType", "0")
 
     /////////////////////////////////////////////////////////////////////////////////////////
     //  Hbase 相关的表
@@ -164,10 +164,12 @@ object AuthBaseLine {
       val a_b_v_crat = x(8).toString
       val a_b_t_crat = x(9).toString
 
-      val alramkey0 = progRunType + "_" + time + "_" + companyAndDomain
+      val alramkey0 = "0_" + time + "_" + companyAndDomain
+      val alramkey1 = "1_" + time + "_" + companyAndDomain
       val resultkey = companyAndDomain + "_" + time
 
       val putAlarm0 = new Put(Bytes.toBytes(alramkey0))
+      val putAlarm1 = new Put(Bytes.toBytes(alramkey1))
       val resultPut = new Put(Bytes.toBytes(resultkey))
 
       putAlarm0.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_3_rat"), Bytes.toBytes(a_b_3_rat))
@@ -179,6 +181,14 @@ object AuthBaseLine {
       putAlarm0.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_v_crat"), Bytes.toBytes(a_b_v_crat))
       putAlarm0.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_t_crat"), Bytes.toBytes(a_b_t_crat))
 
+      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_3_rat"), Bytes.toBytes(a_b_3_rat))
+      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_4_rat"), Bytes.toBytes(a_b_4_rat))
+      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_v_rat"), Bytes.toBytes(a_b_v_rat))
+      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_t_rat"), Bytes.toBytes(a_b_t_rat))
+      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_3_crat"), Bytes.toBytes(a_b_3_crat))
+      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_4_crat"), Bytes.toBytes(a_b_4_crat))
+      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_v_crat"), Bytes.toBytes(a_b_v_crat))
+      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_t_crat"), Bytes.toBytes(a_b_t_crat))
 
       resultPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_3_rat"), Bytes.toBytes(a_b_3_rat))
       resultPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_4_rat"), Bytes.toBytes(a_b_4_rat))
@@ -189,12 +199,13 @@ object AuthBaseLine {
       resultPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_v_crat"), Bytes.toBytes(a_b_v_crat))
       resultPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_b_t_crat"), Bytes.toBytes(a_b_t_crat))
 
-      ((new ImmutableBytesWritable, putAlarm0), (new ImmutableBytesWritable, resultPut))
+      ((new ImmutableBytesWritable, putAlarm0), (new ImmutableBytesWritable, putAlarm1), (new ImmutableBytesWritable, resultPut))
     })
 
 
     HbaseDataUtil.saveRddToHbase(alarmHtable, resultRDD.map(x=>x._1))
-    HbaseDataUtil.saveRddToHbase(resultHtable, resultRDD.map(x=>x._2))
+    HbaseDataUtil.saveRddToHbase(alarmHtable, resultRDD.map(x=>x._2))
+    HbaseDataUtil.saveRddToHbase(resultHtable, resultRDD.map(x=>x._3))
 
 
 

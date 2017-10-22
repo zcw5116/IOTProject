@@ -31,7 +31,7 @@ object FlowBaseLine {
     val alarmHtablePre = sc.getConf.get("spark.app.htable.alarmTablePre", "analyze_summ_tab_")
     val resultHtablePre = sc.getConf.get("spark.app.htable.resultHtablePre", "analyze_summ_rst_")
     val targetdayid = sc.getConf.get("spark.app.htable.targetdayid")
-    val progRunType = sc.getConf.get("spark.app.progRunType", "0")
+    // val progRunType = sc.getConf.get("spark.app.progRunType", "0")
 
     /////////////////////////////////////////////////////////////////////////////////////////
     //  Hbase 相关的表
@@ -165,10 +165,12 @@ object FlowBaseLine {
       val f_b_t_d = x(9).toString
       val f_b_t_t = x(10).toString
 
-      val alramkey0 = progRunType + "_" + time + "_" + companyAndDomain
+      val alramkey0 = "0_" + time + "_" + companyAndDomain
+      val alramkey1 = "1_" + time + "_" + companyAndDomain
       val resultkey = companyAndDomain + "_" + time
 
       val putAlarm0 = new Put(Bytes.toBytes(alramkey0))
+      val putAlarm1 = new Put(Bytes.toBytes(alramkey1))
       val resultPut = new Put(Bytes.toBytes(resultkey))
 
       putAlarm0.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_b_3_u"), Bytes.toBytes(f_b_3_u))
@@ -181,6 +183,15 @@ object FlowBaseLine {
       putAlarm0.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_b_t_d"), Bytes.toBytes(f_b_t_d))
       putAlarm0.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_b_t_t"), Bytes.toBytes(f_b_t_t))
 
+      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_b_3_u"), Bytes.toBytes(f_b_3_u))
+      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_b_3_d"), Bytes.toBytes(f_b_3_d))
+      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_b_3_t"), Bytes.toBytes(f_b_3_t))
+      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_b_4_u"), Bytes.toBytes(f_b_4_u))
+      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_b_4_d"), Bytes.toBytes(f_b_4_d))
+      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_b_4_t"), Bytes.toBytes(f_b_4_t))
+      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_b_t_u"), Bytes.toBytes(f_b_t_u))
+      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_b_t_d"), Bytes.toBytes(f_b_t_d))
+      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_b_t_t"), Bytes.toBytes(f_b_t_t))
 
       resultPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_b_3_u"), Bytes.toBytes(f_b_3_u))
       resultPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_b_3_d"), Bytes.toBytes(f_b_3_d))
@@ -192,12 +203,13 @@ object FlowBaseLine {
       resultPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_b_t_d"), Bytes.toBytes(f_b_t_d))
       resultPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_b_t_t"), Bytes.toBytes(f_b_t_t))
 
-      ((new ImmutableBytesWritable, putAlarm0), (new ImmutableBytesWritable, resultPut))
+      ((new ImmutableBytesWritable, putAlarm0), (new ImmutableBytesWritable, putAlarm1), (new ImmutableBytesWritable, resultPut))
     })
 
 
     HbaseDataUtil.saveRddToHbase(alarmHtable, resultRDD.map(x=>x._1))
-    HbaseDataUtil.saveRddToHbase(resultHtable, resultRDD.map(x=>x._2))
+    HbaseDataUtil.saveRddToHbase(alarmHtable, resultRDD.map(x=>x._2))
+    HbaseDataUtil.saveRddToHbase(resultHtable, resultRDD.map(x=>x._3))
 
 
 

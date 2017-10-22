@@ -32,7 +32,7 @@ object OnlineBaseLine {
     val resultHtablePre = sc.getConf.get("spark.app.htable.resultHtablePre", "analyze_summ_rst_")
     val targetdayid = sc.getConf.get("spark.app.htable.targetdayid", "20171012")
     // 实时分析类型： 0-后续会离线重跑数据, 2-后续不会离线重跑数据
-    val progRunType = sc.getConf.get("spark.app.progRunType", "0")
+    // val progRunType = sc.getConf.get("spark.app.progRunType", "0")
 
 
     /////////////////////////////////////////////////////////////////////////////////////////
@@ -141,26 +141,33 @@ object OnlineBaseLine {
       val o_b_4_on =  x(3).toString
       val o_b_t_on = x(4).toString
 
-      val alramkey = progRunType + "_" + time + "_" + companyAndDomain
+      val alramkey0 = "0_" + time + "_" + companyAndDomain
+      val alramkey1 = "0_" + time + "_" + companyAndDomain
       val resultkey = companyAndDomain + "_" + time
 
-      val putAlarm = new Put(Bytes.toBytes(alramkey))
+      val putAlarm0 = new Put(Bytes.toBytes(alramkey0))
+      val putAlarm1 = new Put(Bytes.toBytes(alramkey1))
       val resultPut = new Put(Bytes.toBytes(resultkey))
 
-      putAlarm.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_b_3_on"), Bytes.toBytes(o_b_3_on))
-      putAlarm.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_b_4_on"), Bytes.toBytes(o_b_4_on))
-      putAlarm.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_b_t_on"), Bytes.toBytes(o_b_t_on))
+      putAlarm0.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_b_3_on"), Bytes.toBytes(o_b_3_on))
+      putAlarm0.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_b_4_on"), Bytes.toBytes(o_b_4_on))
+      putAlarm0.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_b_t_on"), Bytes.toBytes(o_b_t_on))
+
+      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_b_3_on"), Bytes.toBytes(o_b_3_on))
+      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_b_4_on"), Bytes.toBytes(o_b_4_on))
+      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_b_t_on"), Bytes.toBytes(o_b_t_on))
 
       resultPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_b_3_on"), Bytes.toBytes(o_b_3_on))
       resultPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_b_4_on"), Bytes.toBytes(o_b_4_on))
       resultPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("o_b_t_on"), Bytes.toBytes(o_b_t_on))
 
-      ((new ImmutableBytesWritable, putAlarm), (new ImmutableBytesWritable, resultPut))
+      ((new ImmutableBytesWritable, putAlarm0), (new ImmutableBytesWritable, putAlarm1), (new ImmutableBytesWritable, resultPut))
     })
 
 
     HbaseDataUtil.saveRddToHbase(alarmHtable, resultRDD.map(x=>x._1))
-    HbaseDataUtil.saveRddToHbase(resultHtable, resultRDD.map(x=>x._2))
+    HbaseDataUtil.saveRddToHbase(alarmHtable, resultRDD.map(x=>x._2))
+    HbaseDataUtil.saveRddToHbase(resultHtable, resultRDD.map(x=>x._3))
 
 
   }

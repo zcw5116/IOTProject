@@ -236,7 +236,8 @@ object OnlineBase extends Logging{
          |) t where u.mdn = t.mdn and u.isvpdn='1'
          |group by companycode, type
          |GROUPING SETS (companycode, (companycode, type))
-         |union all
+         |union all    val hivedb = ConfigProperties.IOT_HIVE_DATABASE
+
          |select companycode, 'C' as servtype, vpdndomain, type, count(*) as usrcnt
          |from
          |(

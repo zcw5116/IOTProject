@@ -31,7 +31,7 @@ object MMEBaseLine {
     val alarmHtablePre = sc.getConf.get("spark.app.htable.alarmTablePre", "analyze_summ_tab_")
     val resultHtablePre = sc.getConf.get("spark.app.htable.resultHtablePre", "analyze_summ_rst_")
     val targetdayid = sc.getConf.get("spark.app.htable.targetdayid")
-    val progRunType = sc.getConf.get("spark.app.progRunType", "0")
+    // val progRunType = sc.getConf.get("spark.app.progRunType", "0")
 
     /////////////////////////////////////////////////////////////////////////////////////////
     //  Hbase 相关的表
@@ -153,10 +153,12 @@ object MMEBaseLine {
       val ma_b_4_fcn = x(6).toString
       val ma_b_4_rat = x(7).toString
 
-      val alramkey0 = progRunType + "_" + time + "_" + companyAndDomain
+      val alramkey0 = "0_" + time + "_" + companyAndDomain
+      val alramkey1 = "1_" + time + "_" + companyAndDomain
       val resultkey = companyAndDomain + "_" + time
 
       val putAlarm0 = new Put(Bytes.toBytes(alramkey0))
+      val putAlarm1 = new Put(Bytes.toBytes(alramkey1))
       val resultPut = new Put(Bytes.toBytes(resultkey))
 
       putAlarm0.addColumn(Bytes.toBytes("s"), Bytes.toBytes("ma_b_4_rn"), Bytes.toBytes(ma_b_4_rn))
@@ -166,6 +168,12 @@ object MMEBaseLine {
       putAlarm0.addColumn(Bytes.toBytes("s"), Bytes.toBytes("ma_b_4_fcn"), Bytes.toBytes(ma_b_4_fcn))
       putAlarm0.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_b_4_t"), Bytes.toBytes(ma_b_4_rat))
 
+      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("ma_b_4_rn"), Bytes.toBytes(ma_b_4_rn))
+      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("ma_b_4_sn"), Bytes.toBytes(ma_b_4_sn))
+      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("ma_b_4_rcn"), Bytes.toBytes(ma_b_4_rcn))
+      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("ma_b_4_scn"), Bytes.toBytes(ma_b_4_scn))
+      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("ma_b_4_fcn"), Bytes.toBytes(ma_b_4_fcn))
+      putAlarm1.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_b_4_t"), Bytes.toBytes(ma_b_4_rat))
 
       resultPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("ma_b_4_rn"), Bytes.toBytes(ma_b_4_rn))
       resultPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("ma_b_4_sn"), Bytes.toBytes(ma_b_4_sn))
@@ -174,12 +182,13 @@ object MMEBaseLine {
       resultPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("ma_b_4_fcn"), Bytes.toBytes(ma_b_4_fcn))
       resultPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("ma_b_4_rat"), Bytes.toBytes(ma_b_4_rat))
 
-      ((new ImmutableBytesWritable, putAlarm0), (new ImmutableBytesWritable, resultPut))
+      ((new ImmutableBytesWritable, putAlarm0), (new ImmutableBytesWritable, putAlarm1), (new ImmutableBytesWritable, resultPut))
     })
 
 
     HbaseDataUtil.saveRddToHbase(alarmHtable, resultRDD.map(x=>x._1))
-    HbaseDataUtil.saveRddToHbase(resultHtable, resultRDD.map(x=>x._2))
+    HbaseDataUtil.saveRddToHbase(alarmHtable, resultRDD.map(x=>x._2))
+    HbaseDataUtil.saveRddToHbase(resultHtable, resultRDD.map(x=>x._3))
 
 
 

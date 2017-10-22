@@ -280,9 +280,6 @@ object SMSGRealtimeAnalysis extends Logging{
     HbaseDataUtil.saveRddToHbase(resultDayHtable, accumRDD)
 
 
-  
-
-
 
     // 更新时间, 断点时间比数据时间多1分钟
     val updateTime = DateUtils.timeCalcWithFormatConvertSafe(dataTime, "yyyyMMddHHmm", 1*60, "yyyyMMddHHmm")

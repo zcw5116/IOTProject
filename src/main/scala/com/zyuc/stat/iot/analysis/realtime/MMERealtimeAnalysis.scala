@@ -38,11 +38,14 @@ object MMERealtimeAnalysis extends Logging{
     val userTableDataDayid = sc.getConf.get("spark.app.table.userTableDataDayid")
 
     val mmelogTable = sc.getConf.get("spark.app.table.mmelogTable", "iot_mme_log")
+    val bs4gTable = sc.getConf.get("spark.app.table.bs4gTable", "iot_basestation_4g")
 
     val alarmHtablePre = sc.getConf.get("spark.app.htable.alarmTablePre", "analyze_summ_tab_mme_")
     val resultHtablePre = sc.getConf.get("spark.app.htable.resultHtablePre", "analyze_summ_rst_mme_")
     val resultDayHtable = sc.getConf.get("spark.app.htable.resultDayHtable", "analyze_summ_rst_everyday")
+    val resultBSHtable = sc.getConf.get("spark.app.htable.resultBSHtable", "analyze_summ_rst_bs_mme")
     val analyzeBPHtable = sc.getConf.get("spark.app.htable.analyzeBPHtable", "analyze_bp_tab")
+
 
 
     // 实时分析类型： 0-后续会离线重跑数据, 2-后续不会离线重跑数据
@@ -67,6 +70,7 @@ object MMERealtimeAnalysis extends Logging{
 
     //  dataTime-当前数据时间  nextDataTime-下一个时刻数据的时间
     val dataTime = appName.substring(appName.lastIndexOf("_") + 1)
+    val dataDayid = dataTime.substring(0, 8)
     val nextDataTime = DateUtils.timeCalcWithFormatConvertSafe(dataTime, "yyyyMMddHHmm", 5*60, "yyyyMMddHHmm")
     // 转换成hive表中的时间格式
     val startTimeStr = DateUtils.timeCalcWithFormatConvertSafe(dataTime, "yyyyMMddHHmm", -5*60, "yyyy-MM-dd HH:mm:ss")
@@ -111,6 +115,11 @@ object MMERealtimeAnalysis extends Logging{
     HbaseUtils.createIfNotExists(analyzeBPHtable, analyzeBPFamilies)
 
 
+    // analyzeBPHtable
+    val bsFamilies = new Array[String](1)
+    bsFamilies(0) = "r"
+    HbaseUtils.createIfNotExists(resultBSHtable, bsFamilies)
+
     ////////////////////////////////////////////////////////////////
     //   cache table
     ///////////////////////////////////////////////////////////////
@@ -124,11 +133,27 @@ object MMERealtimeAnalysis extends Logging{
     // 如果话单到号码没有走vpdn，mdndomain设置为-1
     val mdnSql =
     s"""
-       |select u.mdn, u.companycode, u.vpdndomain, m.pcause, m.result, m.enbid, u.isdirect, u.isvpdn, u.iscommon
-       |from  ${userInfoTableCached} u, ${mmelogTable} m
-       |where m.d = '${partitionD}'  and m.h = '${partitionH}' and m.m5='${partitionM5}'
-       |      and u.mdn = m.msisdn and m.isattach=1
+       |    select u.mdn, u.companycode, u.vpdndomain, m.pcause, m.result, u.isdirect, u.isvpdn, u.iscommon,
+       |           (case when m.mmetype in('hwmm','hwsm') then conv(substr(m.enbid,3), 16, 10) else m.enbid end) as enbid
+       |    from   ${mmelogTable} m inner join ${userInfoTableCached} u
+       |           on( m.msisdn=u.mdn)
+       |    where  m.isattach=1 and m.d = '${partitionD}'  and m.h = '${partitionH}' and m.m5='${partitionM5}'
        """.stripMargin
+
+/*    val mdnSql =
+    s"""
+       |select t.mdn, t.companycode, t.vpdndomain, t.pcause, t.result, t.enbid, t.isdirect, t.isvpdn, t.iscommon,
+       |       t.enbid, b.provId, b.provName, b.cityId, b.cityName, b.zhLabel
+       |from
+       |(
+       |    select u.mdn, u.companycode, u.vpdndomain, m.pcause, m.result, u.isdirect, u.isvpdn, u.iscommon,
+       |           (case when m.mmetype in('hwmm','hwsm') then conv(substr(m.enbid,3), 16, 10) else m.enbid end) as enbid
+       |    from   ${mmelogTable} m left join ${userInfoTableCached} u
+       |           on( m.msisdn=u.mdn)
+       |    where  m.isattach=1 and m.d = '${partitionD}'  and m.h = '${partitionH}' and m.m5='${partitionM5}'
+       |) t  left join ${bs4gTable} b
+       |on(t.enbid = b.enbid) where t.companycode is not null
+       """.stripMargin*/
 
 
     val mdnTable = "mdnTable_" + startTime
@@ -275,7 +300,58 @@ object MMERealtimeAnalysis extends Logging{
     HbaseDataUtil.saveRddToHbase(resultDayHtable, resultRDD.map(x=>x._5))
 
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //   基站数据
+    //
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    val bsSQL =
+      s"""select companycode, servtype, '-1' as vpdndomain, enbid,
+         |count(*) as reqcnt,
+         |sum(case when result='success' then 1 else 0 end) as reqsucccnt
+         |from
+         |(
+         |   select companycode,
+         |          (case when isdirect='1' then 'D' when iscommon='1' then 'P' else '-1' end) servtype,
+         |          enbid, result
+         |   from ${mdnTable}
+         |) t group by companycode, servtype, enbid
+         |grouping sets((companycode), (companycode, enbid), (companycode, servtype, enbid))
+         |union all
+         |select companycode, 'C' as servtype, '-1' as vpdndomain, enbid,
+         |       count(*) as reqcnt,
+         |       sum(case when result='success' then 1 else 0 end) as reqsucccnt
+         |from ${mdnTable}
+         |where isvpdn='1'
+         |group by companycode, enbid
+         |union all
+         |select companycode, servtype, domain as vpdndomain, enbid,
+         |       count(*) as reqcnt,
+         |       sum(case when result='success' then 1 else 0 end) as reqsucccnt
+         |from
+         |(
+         |    select companycode, 'C' as servtype, domain, enbid, result
+         |    from ${mdnTable} lateral view explode(split(vpdndomain,',')) c as domain
+         |    where isvpdn='1'
+         |) t group by companycode, servtype, domain, enbid
+       """.stripMargin
+
+    val bsResultDF = sqlContext.sql(bsSQL).filter("servtype!='-1' or servtype is null").coalesce(10)
+    val bsResultRDD = bsResultDF.rdd.map(x=>{
+      val c = if( null == x(0)) "-1" else x(0).toString // companycode
+      val s = if(null == x(1)) "-1" else x(1).toString // servicetype
+      val v = if(null == x(2)) "-1" else x(2).toString // vpdndomain
+      val bid = if(null == x(3)) "-1" else x(3).toString //enbid
+      val rn = x(4).toString // reqcnt
+      val rsn = x(5).toString // request success cnt
+
+      val rkey = dataTime + "_" + c + "_" + s + "_" + v + "_" + bid
+      val put = new Put(Bytes.toBytes(rkey))
+      put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_rn"), Bytes.toBytes(rn))
+      put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_sn"), Bytes.toBytes(rsn))
+      (new ImmutableBytesWritable, put)
+    })
+    HbaseDataUtil.saveRddToHbase(resultBSHtable, bsResultRDD)
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
     //   失败原因写入
     //
