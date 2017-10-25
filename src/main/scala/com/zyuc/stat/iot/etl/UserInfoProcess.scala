@@ -25,9 +25,9 @@ object UserInfoProcess {
     val appName = sc.getConf.get("spark.app.appName", "UserInfoETL")
     val dataDayid = sc.getConf.get("spark.app.dataDayid", "20170919")
     // val dataDayid = "20170714"
-    val userTable = sc.getConf.get("spark.app.userTable", "iot_customer_userinfo")
+    //val userTable = sc.getConf.get("spark.app.userTable", "iot_customer_userinfo")
     // val userTable = "iot_customer_userinfo"
-    val syncType = sc.getConf.get("spark.app.syncType", "incr")
+    // val syncType = sc.getConf.get("spark.app.syncType", "incr")
     //val inputPath = "/hadoop/IOT/ANALY_PLATFORM/BasicData/UserInfo/"
     val inputPath = sc.getConf.get("spark.app.inputPath", "/hadoop/IOT/ANALY_PLATFORM/BasicData/UserInfo")
     val outputPath = sc.getConf.get("spark.app.outputPath", "/hadoop/IOT/data/basic/user/")
@@ -40,7 +40,7 @@ object UserInfoProcess {
     val companyAndDomainTable = sc.getConf.get("spark.app.companyAndDomainTable", "iot_basic_company_and_domain")
 
     val provinceMapcodeFile = sc.getConf.get("spark.app.provinceMapcodeFile", "/hadoop/IOT/ANALY_PLATFORM/BasicData/iotDimMapcodeProvince/iot_dim_mapcode_province.txt")
-    val vpnToApnMapFile = sc.getConf.get("spark.app.vpnToApnMapFile", "/hadoop/IOT/ANALY_PLATFORM/BasicData/VpdnToApn/vpdntoapn.txt")
+    //val vpnToApnMapFile = sc.getConf.get("spark.app.vpnToApnMapFile", "/hadoop/IOT/ANALY_PLATFORM/BasicData/VpdnToApn/vpdntoapn.txt")
 
 
     //val outputPath = "/hadoop/IOT/ANALY_PLATFORM/BasicData/output/UserInfo/"
