@@ -39,7 +39,7 @@ object CDRRealtimeAnalysis extends Logging{
     sqlContext.sql("use " + ConfigProperties.IOT_HIVE_DATABASE)
 
     // 获取参数
-    val appName = sc.getConf.get("spark.app.name","name_201710070040") // name_201708010040
+    val appName = sc.getConf.get("spark.app.name","name_201710251500") // name_201708010040
     val userInfoTable = sc.getConf.get("spark.app.table.userInfoTable", "iot_basic_userinfo") //
     val userAndDomainTable = sc.getConf.get("spark.app.table.userAndDomainTable", "iot_basic_user_and_domain")
     val companyAndDomainTable = sc.getConf.get("spark.app.table.companyAndDomainTable", "iot_basic_company_and_domain")
@@ -51,6 +51,7 @@ object CDRRealtimeAnalysis extends Logging{
     val alarmHtablePre = sc.getConf.get("spark.app.htable.alarmTablePre", "analyze_summ_tab_flow_")
     val resultHtablePre = sc.getConf.get("spark.app.htable.resultHtablePre", "analyze_summ_rst_flow_")
     val resultDayHtable = sc.getConf.get("spark.app.htable.resultDayHtable", "analyze_summ_rst_everyday")
+    val resultBSHtable = sc.getConf.get("spark.app.htable.resultBSHtable", "analyze_summ_rst_bs")
     val analyzeBPHtable = sc.getConf.get("spark.app.htable.analyzeBPHtable", "analyze_bp_tab")
 
     val vpnToApnMapFile = sc.getConf.get("spark.app.vpnToApnMapFile", "/hadoop/IOT/ANALY_PLATFORM/BasicData/VpdnToApn/vpdntoapn.txt")
@@ -127,6 +128,10 @@ object CDRRealtimeAnalysis extends Logging{
     analyzeBPFamilies(0) = "bp"
     HbaseUtils.createIfNotExists(analyzeBPHtable, analyzeBPFamilies)
 
+    // resultBSHtable
+    val bsFamilies = new Array[String](1)
+    bsFamilies(0) = "r"
+    HbaseUtils.createIfNotExists(resultBSHtable, bsFamilies)
 
     ////////////////////////////////////////////////////////////////
     //   cache table
@@ -134,9 +139,8 @@ object CDRRealtimeAnalysis extends Logging{
     val userInfoTableCached = "userInfoTableCached"
     sqlContext.sql(s"cache table ${userInfoTableCached} as select mdn, imsicdma, companycode, vpdndomain, isvpdn, isdirect from $userInfoTable where d=$userTableDataDayid")
 
-    val userAndDomainTableCached = "userAndDomainTableCached"
-    sqlContext.sql(s"cache table ${userAndDomainTableCached} as select mdn, companycode, isvpdn, vpdndomain, apn, isdirect from $userAndDomainTable where d=$userTableDataDayid")
-
+    //val userAndDomainTableCached = "userAndDomainTableCached"
+    //sqlContext.sql(s"cache table ${userAndDomainTableCached} as select mdn, companycode, isvpdn, vpdndomain, apn, isdirect from $userAndDomainTable where d=$userTableDataDayid")
 
 
     // 关联3g的mdn, domain,  基站
@@ -166,10 +170,10 @@ object CDRRealtimeAnalysis extends Logging{
          |select u.companycode, '4g' type, u.mdn,
          |(case when u.isdirect='1' then 'D' when u.isvpdn=1 and array_contains(split(u.vpdndomain,','), d.vpdndomain) then 'C' else 'P' end) as servtype,
          |(case when u.isdirect!='1' and array_contains(split(u.vpdndomain,','), d.vpdndomain) then d.vpdndomain else '-1' end)  as vpdndomain,
-         |"-1" bsid, downflow, upflow
+         |u.bsid, downflow, upflow
          |from
          |(
-         |    select p.mdn,p.accesspointnameni as apn, t.companycode, t.vpdndomain, t.isdirect, t.isvpdn,
+         |    select p.mdn,p.accesspointnameni as apn, t.companycode, t.vpdndomain, t.isdirect, t.isvpdn,p.bsid,
          |           nvl(l_datavolumefbcdownlink,0) as downflow, nvl(l_datavolumefbcuplink,0) as upflow
          |    from ${pgwTable} p, ${userInfoTableCached} t
          |    where p.mdn = t.mdn and p.d = '${partitionD}'  and p.h = '${partitionH}' and p.m5='${partitionM5}'
@@ -301,8 +305,35 @@ object CDRRealtimeAnalysis extends Logging{
     HbaseDataUtil.saveRddToHbase(resultDayHtable, resultRDD.map(x=>x._5))
 
 
+    val bsStatSQL =
+      s"""
+         |select companycode, servtype, vpdndomain, type, bsid,
+         |       sum(upflow) as upflow,
+         |       sum(downflow) as downflow,
+         |       GROUPING__ID
+         |from ${mdnTable}  m
+         |group by companycode, servtype, vpdndomain, type, bsid
+         |GROUPING SETS ((companycode, type, bsid),(companycode, servtype, type, bsid),(companycode, servtype, vpdndomain, type, bsid))
+       """.stripMargin
 
+    val bsResultDF = sqlContext.sql(bsStatSQL).filter("vpdndomain is null or vpdndomain!='-1'").coalesce(10)
 
+    val bsResultRDD = bsResultDF.rdd.map(x=>{
+      val c = if( null == x(0)) "-1" else x(0).toString // companycode
+      val s = if(null == x(1)) "-1" else x(1).toString // servicetype
+      val v = if(null == x(2)) "-1" else x(2).toString // vpdndomain
+      val n = if(null == x(3)) "0" else x(3).toString //net
+      val bid = if(null == x(4)) "0" else x(4).toString //enbid
+      val uflow = if(null == x(5)) "0" else  x(5).toString // upflow
+      val dflow = if(null == x(6)) "0" else   x(6).toString // downflow
+
+      val rkey = dataTime + "_" + n + "_" + c + "_" + s + "_" + v + "_" + bid
+      val put = new Put(Bytes.toBytes(rkey))
+      put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_u"), Bytes.toBytes(uflow))
+      put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_d"), Bytes.toBytes(dflow))
+      (new ImmutableBytesWritable, put)
+    })
+    HbaseDataUtil.saveRddToHbase(resultBSHtable, bsResultRDD)
 
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////

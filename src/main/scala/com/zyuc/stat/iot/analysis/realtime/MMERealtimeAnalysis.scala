@@ -43,7 +43,7 @@ object MMERealtimeAnalysis extends Logging{
     val alarmHtablePre = sc.getConf.get("spark.app.htable.alarmTablePre", "analyze_summ_tab_mme_")
     val resultHtablePre = sc.getConf.get("spark.app.htable.resultHtablePre", "analyze_summ_rst_mme_")
     val resultDayHtable = sc.getConf.get("spark.app.htable.resultDayHtable", "analyze_summ_rst_everyday")
-    val resultBSHtable = sc.getConf.get("spark.app.htable.resultBSHtable", "analyze_summ_rst_bs_mme")
+    val resultBSHtable = sc.getConf.get("spark.app.htable.resultBSHtable", "analyze_summ_rst_bs")
     val analyzeBPHtable = sc.getConf.get("spark.app.htable.analyzeBPHtable", "analyze_bp_tab")
 
 
@@ -115,7 +115,7 @@ object MMERealtimeAnalysis extends Logging{
     HbaseUtils.createIfNotExists(analyzeBPHtable, analyzeBPFamilies)
 
 
-    // analyzeBPHtable
+    // resultBSHtable
     val bsFamilies = new Array[String](1)
     bsFamilies(0) = "r"
     HbaseUtils.createIfNotExists(resultBSHtable, bsFamilies)
@@ -316,7 +316,7 @@ object MMERealtimeAnalysis extends Logging{
          |          enbid, result
          |   from ${mdnTable}
          |) t group by companycode, servtype, enbid
-         |grouping sets((companycode), (companycode, enbid), (companycode, servtype, enbid))
+         |grouping sets((companycode, enbid), (companycode, servtype, enbid))
          |union all
          |select companycode, 'C' as servtype, '-1' as vpdndomain, enbid,
          |       count(*) as reqcnt,
@@ -341,11 +341,11 @@ object MMERealtimeAnalysis extends Logging{
       val c = if( null == x(0)) "-1" else x(0).toString // companycode
       val s = if(null == x(1)) "-1" else x(1).toString // servicetype
       val v = if(null == x(2)) "-1" else x(2).toString // vpdndomain
-      val bid = if(null == x(3)) "-1" else x(3).toString //enbid
+      val bid = if(null == x(3)) "0" else x(3).toString //enbid
       val rn = x(4).toString // reqcnt
       val rsn = x(5).toString // request success cnt
 
-      val rkey = dataTime + "_" + c + "_" + s + "_" + v + "_" + bid
+      val rkey = dataTime + "_4g_" + c + "_" + s + "_" + v + "_" + bid
       val put = new Put(Bytes.toBytes(rkey))
       put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_rn"), Bytes.toBytes(rn))
       put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_sn"), Bytes.toBytes(rsn))
