@@ -31,7 +31,7 @@ object AuthRealtimeAnalysis extends Logging{
     sqlContext.sql("use " + ConfigProperties.IOT_HIVE_DATABASE)
 
     // 获取参数
-    val appName = sc.getConf.get("spark.app.name","name_201708010040") // name_201708010040
+    val appName = sc.getConf.get("spark.app.name","name_201710230840") // name_201708010040
     val userInfoTable = sc.getConf.get("spark.app.table.userInfoTable", "iot_basic_userinfo") //
     val userAndDomainTable = sc.getConf.get("spark.app.table.userAndDomainTable", "iot_basic_user_and_domain")
     val companyAndDomainTable = sc.getConf.get("spark.app.table.companyAndDomainTable", "iot_basic_company_and_domain")
@@ -43,7 +43,7 @@ object AuthRealtimeAnalysis extends Logging{
     val alarmHtablePre = sc.getConf.get("spark.app.htable.alarmTablePre", "analyze_summ_tab_auth_")
     val resultHtablePre = sc.getConf.get("spark.app.htable.resultHtablePre", "analyze_summ_rst_auth_")
     val resultDayHtable = sc.getConf.get("spark.app.htable.resultDayHtable", "analyze_summ_rst_everyday")
-    val resultBSHtable = sc.getConf.get("spark.app.htable.resultBSHtable", "analyze_summ_rst_bs_mme")
+    val resultBSHtable = sc.getConf.get("spark.app.htable.resultBSHtable", "analyze_summ_rst_bs")
     val analyzeBPHtable = sc.getConf.get("spark.app.htable.analyzeBPHtable", "analyze_bp_tab")
 
 
@@ -111,7 +111,10 @@ object AuthRealtimeAnalysis extends Logging{
     analyzeBPFamilies(0) = "bp"
     HbaseUtils.createIfNotExists(analyzeBPHtable, analyzeBPFamilies)
 
-
+    // resultBSHtable
+    val bsFamilies = new Array[String](1)
+    bsFamilies(0) = "r"
+    HbaseUtils.createIfNotExists(resultBSHtable, bsFamilies)
     ////////////////////////////////////////////////////////////////
     //   cache table
     ///////////////////////////////////////////////////////////////
@@ -313,11 +316,11 @@ object AuthRealtimeAnalysis extends Logging{
       val c = if( null == x(0)) "-1" else x(0).toString // companycode
       val s = if(null == x(1)) "-1" else x(1).toString // servicetype
       val v = if(null == x(2)) "-1" else x(2).toString // vpdndomain
-      val bid = if(null == x(3)) "-1" else x(3).toString //enbid
+      val bid = if(null == x(3)) "0" else x(3).toString //enbid为空的置为0
       val rn = x(4).toString // reqcnt
       val rsn = x(5).toString // request success cnt
 
-      val rkey = dataTime + "_" + c + "_" + s + "_" + v + "_" + bid
+      val rkey = dataTime + "_3g_" + c + "_" + s + "_" + v + "_" + bid
       val put = new Put(Bytes.toBytes(rkey))
       put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_rn"), Bytes.toBytes(rn))
       put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_sn"), Bytes.toBytes(rsn))

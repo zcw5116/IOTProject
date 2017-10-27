@@ -6,6 +6,7 @@ import org.apache.spark.sql.DataFrame
 
 /**
   * Created by zhoucw on 17-7-23.
+  * 1. pgw: add bsid field
   */
 object CDRConverterUtils extends Logging{
   val LOG_TYPE_PDSN:String = "pdsn"
@@ -64,6 +65,7 @@ object CDRConverterUtils extends Logging{
           "T6  as  chargingid", "T7  as  pdnconnectionid", "T8  as  servingnodeaddress", "T800  as  t800",
           "T801  as  t801", "T802  as  t802", "T804  as  t804", "T805  as  t805", "T806  as  t806",
           "T807  as  t807", "T809  as  t809", "T9  as  servingnodetype",
+          "regexp_extract(T28, 'eNodeBId=([0-9]+)', 1) as bsid",
           "substr(regexp_replace(T46,'-',''),3,6) as d", "substr(T46,12,2) as h",
           "lpad(floor(substr(T46,15,2)/5)*5,2,'0') as m5")
 

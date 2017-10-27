@@ -24,7 +24,7 @@ object UserDataETL {
     sqlContext.sql("use " + ConfigProperties.IOT_HIVE_DATABASE)
     val appName = sc.getConf.get("spark.app.appName", "UserInfoETL")
     val dataDayid = sc.getConf.get("spark.app.dataDayid", "20170919")
-    val userPrePartionD = sc.getConf.get("spark.app.userPrePartionD", "20170919")  // 增量用户关联时候， 需要关联前一天的全量数据
+    val userPrePartionD = sc.getConf.get("spark.app.userPrePartionD", "20170918")  // 增量用户关联时候， 需要关联前一天的全量数据
     // val dataDayid = "20170714"
     // val userTable = "iot_customer_userinfo"
     val syncType = sc.getConf.get("spark.app.syncType", "incr")

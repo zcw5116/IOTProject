@@ -12,6 +12,7 @@ import scala.collection.mutable
 
 /**
   * Created by zhoucw on 17-9-21.
+  * @deprecated
   */
 object UserInfoProcess {
 
