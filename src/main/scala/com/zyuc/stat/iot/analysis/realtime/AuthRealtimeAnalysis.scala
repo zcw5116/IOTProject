@@ -43,6 +43,7 @@ object AuthRealtimeAnalysis extends Logging{
     val alarmHtablePre = sc.getConf.get("spark.app.htable.alarmTablePre", "analyze_summ_tab_auth_")
     val resultHtablePre = sc.getConf.get("spark.app.htable.resultHtablePre", "analyze_summ_rst_auth_")
     val resultDayHtable = sc.getConf.get("spark.app.htable.resultDayHtable", "analyze_summ_rst_everyday")
+    val resultBSHtable = sc.getConf.get("spark.app.htable.resultBSHtable", "analyze_summ_rst_bs_mme")
     val analyzeBPHtable = sc.getConf.get("spark.app.htable.analyzeBPHtable", "analyze_bp_tab")
 
 
@@ -127,7 +128,7 @@ object AuthRealtimeAnalysis extends Logging{
          |select u.companycode, m.type, m.mdn,
          |(case when u.isdirect=1 then 'D' when u.isvpdn=1 and array_contains(split(vpdndomain,','), m.mdndomain) then 'C' else 'P' end) as servtype,
          |(case when u.isdirect != 1  and u.isvpdn=1 and array_contains(split(vpdndomain,','), m.mdndomain) then m.mdndomain else '-1' end) as mdndomain,
-         |auth_result, nasportid, result
+         |auth_result, nasportid as bsid, result
          |from
          |(
          |select '3g' type, u.mdn,
@@ -290,6 +291,40 @@ object AuthRealtimeAnalysis extends Logging{
     HbaseDataUtil.saveRddToHbase(curResultHtable, resultRDD.map(x=>x._3))
     HbaseDataUtil.saveRddToHbase(nextResultHtable, resultRDD.map(x=>x._4))
     HbaseDataUtil.saveRddToHbase(resultDayHtable, resultRDD.map(x=>x._5))
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //   基站数据
+    //
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    val bsSQL =
+      s"""
+         |select companycode, servtype, mdndomain, bsid,
+         |       count(*) as rn,
+         |       sum(case when result='s' then 1 else 0 end) rsn
+         |from ${mdnTable}  where type='3g'
+         |group by companycode, servtype, mdndomain, bsid
+         |grouping sets((companycode, servtype, bsid), (companycode, servtype, mdndomain, bsid))
+       """.stripMargin
+
+    val bsResultDF = sqlContext.sql(bsSQL).filter("mdndomain is null or mdndomain!='-1'").coalesce(10)
+
+    val bsResultRDD = bsResultDF.rdd.map(x=>{
+      val c = if( null == x(0)) "-1" else x(0).toString // companycode
+      val s = if(null == x(1)) "-1" else x(1).toString // servicetype
+      val v = if(null == x(2)) "-1" else x(2).toString // vpdndomain
+      val bid = if(null == x(3)) "-1" else x(3).toString //enbid
+      val rn = x(4).toString // reqcnt
+      val rsn = x(5).toString // request success cnt
+
+      val rkey = dataTime + "_" + c + "_" + s + "_" + v + "_" + bid
+      val put = new Put(Bytes.toBytes(rkey))
+      put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_rn"), Bytes.toBytes(rn))
+      put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_sn"), Bytes.toBytes(rsn))
+      (new ImmutableBytesWritable, put)
+    })
+    HbaseDataUtil.saveRddToHbase(resultBSHtable, bsResultRDD)
+
 
 
 

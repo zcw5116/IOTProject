@@ -43,6 +43,7 @@ object UserInfoConverterUtils extends Logging {
     StructField("custstatus", StringType),
     StructField("custtype", StringType),
     StructField("prodtype", StringType),
+
     StructField("internetType", StringType),
     StructField("vpdnOnly", StringType),
     StructField("isCommon", StringType)

@@ -45,7 +45,6 @@ object UserAnalysis extends Logging{
     //   cache table
     ///////////////////////////////////////////////////////////////
 
-
     val statSQL =
       s"""
          |select  companycode, count(*) as totalSum,
@@ -78,20 +77,19 @@ object UserAnalysis extends Logging{
       val tsum = x(2).toString
       val dsum = x(3).toString
       val vsum = x(4).toString
-      val drank = x(5).toString
-      val vrank = x(6).toString
+      val drank = String.format("%5s", x(5).toString).replaceAll(" ","0")
+      val vrank = String.format("%5s", x(6).toString).replaceAll(" ","0")
 
-      val dRowkey = m + "_D_" + drank
-      val vRowkey = m + "_C_" + vrank
-      val dirctPut = new Put(Bytes.toBytes(dRowkey))
-      val vpdnPut = new Put(Bytes.toBytes(vRowkey))
+      val rowkey = m + "_" + c
 
-      dirctPut.addColumn(Bytes.toBytes("u"), Bytes.toBytes("ccode"), Bytes.toBytes(c))
+      val vpdnPut = new Put(Bytes.toBytes(rowkey))
+
+/*      dirctPut.addColumn(Bytes.toBytes("u"), Bytes.toBytes("ccode"), Bytes.toBytes(c))
       dirctPut.addColumn(Bytes.toBytes("u"), Bytes.toBytes("tsum"), Bytes.toBytes(tsum))
       dirctPut.addColumn(Bytes.toBytes("u"), Bytes.toBytes("dsum"), Bytes.toBytes(dsum))
       dirctPut.addColumn(Bytes.toBytes("u"), Bytes.toBytes("vsum"), Bytes.toBytes(vsum))
       dirctPut.addColumn(Bytes.toBytes("u"), Bytes.toBytes("drank"), Bytes.toBytes(drank))
-      dirctPut.addColumn(Bytes.toBytes("u"), Bytes.toBytes("vrank"), Bytes.toBytes(vrank))
+      dirctPut.addColumn(Bytes.toBytes("u"), Bytes.toBytes("vrank"), Bytes.toBytes(vrank))*/
 
       vpdnPut.addColumn(Bytes.toBytes("u"), Bytes.toBytes("ccode"), Bytes.toBytes(c))
       vpdnPut.addColumn(Bytes.toBytes("u"), Bytes.toBytes("tsum"), Bytes.toBytes(tsum))
@@ -100,11 +98,10 @@ object UserAnalysis extends Logging{
       vpdnPut.addColumn(Bytes.toBytes("u"), Bytes.toBytes("drank"), Bytes.toBytes(drank))
       vpdnPut.addColumn(Bytes.toBytes("u"), Bytes.toBytes("vrank"), Bytes.toBytes(vrank))
 
-      ((new ImmutableBytesWritable, dirctPut), (new ImmutableBytesWritable, vpdnPut))
+      (new ImmutableBytesWritable, vpdnPut)
     })
 
-    HbaseDataUtil.saveRddToHbase(hCompanyUsernumTable, resultRDD.map(x=>x._1))
-    HbaseDataUtil.saveRddToHbase(hCompanyUsernumTable, resultRDD.map(x=>x._2))
+    HbaseDataUtil.saveRddToHbase(hCompanyUsernumTable, resultRDD)
 /*
 
     val deleteSQL = s"delete from ${statOracleTable} where monthid='${monthid}' "

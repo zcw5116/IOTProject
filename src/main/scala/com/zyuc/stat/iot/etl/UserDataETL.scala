@@ -113,7 +113,8 @@ object UserDataETL {
 
 
     // 用户和企业关联表
-    val tmpDF = userDF.select("mdn", "imsicdma", "imsilte", "companycode", "vpdndomain", "isvpdn", "isdirect", "userstatus", "atrbprovince", "userprovince", "belo_city", "belo_prov", "custstatus", "custtype", "prodtype","internetType","vpdnOnly","isCommon")
+    val tmpDF = userDF.select("mdn", "imsicdma", "imsilte", "companycode", "vpdndomain", "isvpdn", "isdirect", "userstatus", "atrbprovince",
+      "userprovince", "belo_city", "belo_prov", "custstatus", "custtype", "prodtype","internetType","vpdnOnly","isCommon")
     import sqlContext.implicits._
     val userAndDomainAndCompanyDF = tmpDF.rdd.flatMap(line=>{
       val vpdndomain = line(4).toString
@@ -125,7 +126,8 @@ object UserDataETL {
           line(9).toString,line(10).toString,line(11).toString,line(12).toString,line(13).toString,line(14).toString,line(15).toString,line(16).toString,line(17).toString))
       })
       domainSet
-    }).toDF("mdn", "imsicdma", "imsilte", "companycode", "vpdndomain", "apn", "isvpdn", "isdirect", "userstatus", "atrbprovince", "userprovince", "belo_city", "belo_prov", "custstatus", "custtype", "prodtype","internetType","vpdnOnly","isCommon")
+    }).toDF("mdn", "imsicdma", "imsilte", "companycode", "vpdndomain", "apn", "isvpdn", "isdirect", "userstatus", "atrbprovince",
+      "userprovince", "belo_city", "belo_prov", "custstatus", "custtype", "prodtype","internetType","vpdnOnly","isCommon")
     userAndDomainAndCompanyDF.coalesce(7).write.format("orc").mode(SaveMode.Overwrite).save(userAndDomainOutputPath)
     sqlContext.sql(s"alter table $userAndDomainTable add if not exists partition(d='$dataDayid') ")
 

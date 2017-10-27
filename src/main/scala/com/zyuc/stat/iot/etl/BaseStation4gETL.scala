@@ -14,7 +14,7 @@ import org.apache.spark.sql.hive.HiveContext
   * @author zhoucw
   * @version 1.0
   */
-object BaseStationETL {
+object BaseStation4gETL {
   def main(args: Array[String]): Unit = {
     val sparkConf = new SparkConf()
     //.setMaster("local[4]").setAppName("fd")
