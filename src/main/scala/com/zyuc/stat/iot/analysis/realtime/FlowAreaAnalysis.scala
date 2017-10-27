@@ -18,7 +18,6 @@ import org.apache.spark.{Logging, SparkConf, SparkContext}
   */
 object FlowAreaAnalysis extends Logging {
 
-
   /**
     * 主函数
     *
@@ -100,7 +99,7 @@ object FlowAreaAnalysis extends Logging {
       sqlContext.sql(bsG3SQL).cache().registerTempTable(bsG3Table)
 
 
- /*     val bsG3StatSQL =
+      /*     val bsG3StatSQL =
         s"""
            |select cAndSAndD, nettype, provid, provname, cityid, cityname, enbid, zhlabel,
            |       ma_sn, ma_rn, ma_rat,
@@ -162,18 +161,13 @@ object FlowAreaAnalysis extends Logging {
       sqlContext.sql(bsG4SQL).cache().registerTempTable(bsG4Table)
 
 
+      // 更新时间, 断点时间比数据时间多1分钟
+      val updateTime = DateUtils.timeCalcWithFormatConvertSafe(dataTime, "yyyyMMddHHmm", 1 * 60, "yyyyMMddHHmm")
+      val analyzeColumn = if (progRunType == "0") "analyze_guess_bptime" else "analyze_real_bptime"
+      HbaseUtils.upSertColumnByRowkey(analyzeBPHtable, "bp", "mme", analyzeColumn, updateTime)
 
 
-   
-
-
-
-    // 更新时间, 断点时间比数据时间多1分钟
-    val updateTime = DateUtils.timeCalcWithFormatConvertSafe(dataTime, "yyyyMMddHHmm", 1 * 60, "yyyyMMddHHmm")
-    val analyzeColumn = if (progRunType == "0") "analyze_guess_bptime" else "analyze_real_bptime"
-    HbaseUtils.upSertColumnByRowkey(analyzeBPHtable, "bp", "mme", analyzeColumn, updateTime)
-
+    }
 
   }
-
 }

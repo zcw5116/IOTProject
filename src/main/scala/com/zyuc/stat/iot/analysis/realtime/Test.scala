@@ -49,7 +49,7 @@ object Test extends Logging{
 
     val baseTablePartition = baseDataHourid.substring(2)
 
-
+    sc.textFile("")
 
     if(progRunType!="0" && progRunType!="1" ) {
       logError("param progRunType invalid, expect:0|1")

@@ -32,7 +32,7 @@ public class UserInfoIncrProcess {
         String dataDayid = sc.getConf().get("spark.app.dataDayid", "20171025");
         String userPrePartionD = sc.getConf().get("spark.app.userPrePartionD", "20171024");  // 增量用户关联时候， 需要关联前一天的全量数据
 
-        String syncType = sc.getConf().get("spark.app.syncType", "incr");
+        String syncType = sc.getConf().get("spark.app.syncType", "aincr");
 
         String inputPath = sc.getConf().get("spark.app.inputPath", "/hadoop/IOT/ANALY_PLATFORM/BasicData/UserInfo");
         String outputPath = sc.getConf().get("spark.app.outputPath", "/hadoop/IOT/data/basic/user/");
@@ -50,16 +50,19 @@ public class UserInfoIncrProcess {
         String fileWildcard = sc.getConf().get("spark.app.fileWildcard", "incr_userinfo_qureyes_20171008*" );
         DataFrame df;
         String fileLocation = inputPath + "/" + fileWildcard;
-        if(syncType == "incr"){
-            JavaRDD<Row> txtrdd = loadFileToRDD(sc,fileLocation);
+        System.out.println("syncType=========================" + syncType);
+        if(syncType.equals("incr")){
+            JavaRDD<Row> txtrdd = loadFileToRDD(hiveContext,fileLocation);
             df = savaIncrUserInfo(hiveContext,txtrdd,userInfoTable,dataDayid,userPrePartionD);
             df.write().format("orc").mode(SaveMode.Overwrite).save(userOutputPath);
             hiveContext.sql("alter table "+userInfoTable+" add if not exists partition(d='"+dataDayid+"') ");
+            System.out.println("########################incr");
         }else {
-            JavaRDD<Row> txtrdd = loadFileToRDD(sc,fileLocation);
-            df = hiveContext.createDataFrame(txtrdd,UserInfoIncrConverterUtils.parseType()).repartition(1);
-            df.write().format("orc").mode(SaveMode.Overwrite).save(userOutputPath);
-            hiveContext.sql("alter table "+userInfoTable+" add if not exists partition(d='"+dataDayid+"') ");
+            JavaRDD<Row> txtrdd = loadFileToRDD(hiveContext,fileLocation);
+            df = hiveContext.createDataFrame(txtrdd,UserInfoIncrConverterUtils.parseType());
+            df.repartition(7).write().format("orc").mode(SaveMode.Overwrite).save(userOutputPath);
+           hiveContext.sql("alter table " + userInfoTable + " add if not exists partition(d='" + dataDayid+"') ");
+            System.out.println("########################all");
         }
         // 用户和企业关联表
         DataFrame tmpDF = df.select("mdn", "imsicdma", "imsilte", "companycode", "vpdndomain", "isvpdn", "isdirect", "userstatus", "atrbprovince", "userprovince", "belo_city", "belo_prov", "custstatus", "custtype", "prodtype","internetType","vpdnOnly","isCommon");
@@ -102,13 +105,24 @@ public class UserInfoIncrProcess {
         sc.stop();
         System.out.println("=====end");
     }
-    public static JavaRDD<Row> loadFileToRDD(JavaSparkContext sc,String fileLocation){
-        JavaRDD<String> textDF = sc.textFile(fileLocation);
-        JavaRDD<Row> txtrdd = textDF.map(new Function<String, Row>() {
+    public static JavaRDD<Row> loadFileToRDD(HiveContext sc,String fileLocation){
+        JavaRDD<Row> textDF = sc.read().format("text").load(fileLocation).javaRDD();  // sc.textFile(fileLocation);
+           System.out.println("=====begin:"+DateUtils.getNowTime("yyyyMMddHHmmss"));
+
+        JavaRDD<Row> txtrdd = textDF.map(new Function<Row, Row>() {
             private static final long serialVersionUID = 1L;
-            public Row call(String line)
+            public Row call(Row line)
                     throws Exception {
-                return UserInfoIncrConverterUtils.parseLine(line);
+                Row row = UserInfoIncrConverterUtils.parseLine(line.getString(0));
+                return row;
+            }
+        });
+        System.out.println("=====end:"+DateUtils.getNowTime("yyyyMMddHHmmss"));
+
+        txtrdd.filter(new Function<Row, Boolean>() {
+            @Override
+            public Boolean call(Row row) throws Exception {
+                return row.length()!=1;
             }
         });
         return txtrdd;
@@ -118,7 +132,7 @@ public class UserInfoIncrProcess {
         String incrUserTable = "incrUserTable_" + dataDayid;
         DataFrame df = hiveContext.createDataFrame(txtrdd,UserInfoIncrConverterUtils.parseType()).repartition(7);
         df.registerTempTable(incrUserTable);
-        String preDayUserTable = "preDayUserTable_" + dataDayid;
+        String preDayUserTable = "preDayUserTable_" + userPrePartionD;
         DataFrame preDayDF = hiveContext.sql("select mdn, imsicdma, imsilte, companycode, vpdndomain, isvpdn, isdirect, userstatus, atrbprovince,"+
                 "userprovince, belo_city, belo_prov, custstatus, custtype, prodtype, internetType, vpdnOnly, isCommon from " +
                 userInfoTable+" where d='"+userPrePartionD+"'");
@@ -142,7 +156,7 @@ public class UserInfoIncrProcess {
                 "        if(t.mdn is null, u.vpdnOnly,t.vpdnOnly) as vpdnOnly," +
                 "        if(t.mdn is null, u.isCommon,t.isCommon) as isCommon" +
                 "        from "+preDayUserTable+" u full outer join  "+incrUserTable+" t" +
-                "        on u.mdn=t.mdn";
+                "        on (u.mdn=t.mdn)";
         DataFrame serDF = hiveContext.sql(resultSQL);
        return serDF;
     }
