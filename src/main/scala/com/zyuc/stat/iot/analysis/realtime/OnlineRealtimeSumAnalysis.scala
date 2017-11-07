@@ -23,7 +23,7 @@ object OnlineRealtimeSumAnalysis extends Logging{
     sqlContext.sql("use " + ConfigProperties.IOT_HIVE_DATABASE)
 
     // 获取参数
-    val appName = sc.getConf.get("spark.app.name","name_201710080040") // name_201708010040
+    val appName = sc.getConf.get("spark.app.name","name_201710301700") // name_201708010040
     //val userInfoTable = sc.getConf.get("spark.app.table.userInfoTable", "iot_basic_userinfo") //
     //val userAndDomainTable = sc.getConf.get("spark.app.table.userAndDomainTable", "iot_basic_user_and_domain")
     //val companyAndDomainTable = sc.getConf.get("spark.app.table.companyAndDomainTable", "iot_basic_company_and_domain")
@@ -129,14 +129,14 @@ object OnlineRealtimeSumAnalysis extends Logging{
     for (i <- 0 to intervalDay.toInt) {
       val dayid = DateUtils.timeCalcWithFormatConvertSafe(beginDay, "yyyyMMdd", i * 24 * 60 * 60, "yyyyMMdd")
       if (i == 0) {
-        hbaseDF = OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + dayid).filter(s"time > ${startM5}")
+        hbaseDF = OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + dayid, null).filter(s"time > ${startM5}")
       } else if(i < intervalDay) {
-        val tmpDF = OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + dayid)
+        val tmpDF = OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + dayid, null)
         hbaseDF = hbaseDF.unionAll(tmpDF)
       }
 
       if (i == intervalDay && intervalDay > 0) {
-        val tmpDF = OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + dayid).filter(s"time <= ${endM5}")
+        val tmpDF = OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + dayid, null).filter(s"time <= ${endM5}")
         hbaseDF = hbaseDF.unionAll(tmpDF)
       }else if(intervalDay == 0){
         hbaseDF = hbaseDF.filter(s"time <= ${endM5}")
@@ -144,13 +144,16 @@ object OnlineRealtimeSumAnalysis extends Logging{
 
     }
 
-    val radiusDataTable = "radiusDataTable_" + dataTime
+    val radiusTmpTable = "radiusTmpTable_" + dataTime
     hbaseDF = hbaseDF.selectExpr("rowkey","compnyAndSerAndDomain",
       "nvl(o_c_3_li,0) as o_c_3_li", "nvl(o_c_3_lo,0) as o_c_3_lo", "nvl(o_c_4_li,0) as o_c_4_li",
       "nvl(o_c_4_lo,0) as o_c_4_lo", "nvl(o_c_t_li,0) as o_c_t_li", "nvl(o_c_t_lo,0) as o_c_t_lo")
-    hbaseDF.registerTempTable(radiusDataTable)
-    sqlContext.cacheTable(radiusDataTable)
 
+    hbaseDF.registerTempTable(radiusTmpTable)
+    // sqlContext.cacheTable(radiusDataTable)
+    val radiusDataTable = "radiusDataTable_" + dataTime
+    sqlContext.sql(s"cache table ${radiusDataTable} as select compnyAndSerAndDomain, o_c_3_li, o_c_3_lo, o_c_4_li, o_c_4_lo, o_c_t_li, o_c_t_lo" +
+      s" from ${radiusTmpTable}")
 
 
 
@@ -178,8 +181,7 @@ object OnlineRealtimeSumAnalysis extends Logging{
 
 
 
-
-    val resultRDD = resultDF.coalesce(1).rdd.map(x=>{
+    val resultRDD = resultDF.coalesce(10).rdd.map(x=>{
       val csd = x(0).toString
       val csdArr = csd.split("_",3)
       val companyCode = if(null == csdArr(0)) "-1" else csdArr(0)
@@ -226,7 +228,7 @@ object OnlineRealtimeSumAnalysis extends Logging{
     //
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
     val hisDataTime = DateUtils.timeCalcWithFormatConvertSafe(dataTime, "yyyyMMddHHmm", -hisDayNum*24*60*60, "yyyyMMddHHmm")
-    val hisDF = OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + hisDataTime.substring(0, 8)).filter("time='" + hisDataTime.substring(8, 12) + "'")
+    val hisDF = OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + hisDataTime.substring(0, 8), null).filter("time='" + hisDataTime.substring(8, 12) + "'")
 
     if(hisDF != null){
       val hisResDF = hisDF.select("compnyAndSerAndDomain", "o_c_3_on", "o_c_4_on", "o_c_t_on")

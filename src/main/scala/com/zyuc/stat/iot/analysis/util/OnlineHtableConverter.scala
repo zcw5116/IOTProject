@@ -100,7 +100,7 @@ object OnlineHtableConverter extends Logging {
     * @param htable hbase表名
     * @return
     */
-  def convertToDF(sc: SparkContext, sqlContext: SQLContext, htable: String): DataFrame = {
+  def convertToDF(sc: SparkContext, sqlContext: SQLContext, htable: String, tuple2:Tuple2[String, String]): DataFrame = {
     // 创建hbase configuration
     val hBaseConf = HBaseConfiguration.create()
     //hBaseConf.set("hbase.zookeeper.quorum","EPC-LOG-NM-15,EPC-LOG-NM-17,EPC-LOG-NM-16")
@@ -110,6 +110,11 @@ object OnlineHtableConverter extends Logging {
     hBaseConf.set("hbase.zookeeper.property.clientPort", ConfigProperties.IOT_ZOOKEEPER_CLIENTPORT)
 
     hBaseConf.set(TableInputFormat.INPUT_TABLE, htable)
+    if(tuple2 != null){
+      hBaseConf.set(TableInputFormat.SCAN_ROW_START, tuple2._1)
+      hBaseConf.set(TableInputFormat.SCAN_ROW_STOP, tuple2._2)
+    }
+
     // 从数据源获取数据
     val hbaseRDD = sc.newAPIHadoopRDD(hBaseConf, classOf[TableInputFormat], classOf[ImmutableBytesWritable], classOf[Result])
     val resultDF = sqlContext.createDataFrame(hbaseRDD.map(row => parse(row)).filter(_.length!=1), struct)

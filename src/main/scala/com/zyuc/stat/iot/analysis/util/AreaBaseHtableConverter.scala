@@ -15,10 +15,10 @@ import org.apache.spark.{Logging, SparkContext}
   * @author zhoucw
   * @version 1.0
   */
-object AreaHtableConverter extends Logging {
+object AreaBaseHtableConverter extends Logging {
 
   // struct结构
-  val struct = StructType(Array(
+  val struct1 = StructType(Array(
     StructField("rowkey", StringType),
     StructField("nettype", StringType),
     StructField("cAndSAndD", StringType),
@@ -26,11 +26,17 @@ object AreaHtableConverter extends Logging {
     StructField("datatime", StringType),
 
     StructField("enbid", StringType),
+    StructField("enbname", StringType),
+    StructField("cityid", StringType),
+    StructField("cityname", StringType),
+    StructField("provid", StringType),
+
+    StructField("provname", StringType),
     StructField("ma_sn", StringType),
     StructField("ma_rn", StringType),
     StructField("a_sn", StringType),
-
     StructField("a_rn", StringType),
+
     StructField("f_d", StringType),
     StructField("f_u", StringType)
   ))
@@ -40,7 +46,7 @@ object AreaHtableConverter extends Logging {
     * @param row  hbase每条记录的二元组, Tuple2[ImmutableBytesWritable, Result]
     * @return Row
     */
-  def parse(row: Tuple2[ImmutableBytesWritable, Result]): Row = {
+  def parse1(row: Tuple2[ImmutableBytesWritable, Result]): Row = {
     try{
       val rkey = Bytes.toString(row._2.getRow) //  "201710261310_3g_P100002368_C_-1_3608FFFF1C70"
       val arr = rkey.split("_", 6)
@@ -50,6 +56,12 @@ object AreaHtableConverter extends Logging {
       val cAndSAndDAndB = arr(2) + "_" + arr(3) +"_" + arr(4) + "_" + arr(5) // companycode And Servtype And Domain And enbid
       val datatime = arr(0)
       val enbid = arr(5)
+
+      val enbname = Bytes.toString(row._2.getValue(Bytes.toBytes("r"), Bytes.toBytes("enbname")))
+      val cityid = Bytes.toString(row._2.getValue(Bytes.toBytes("r"), Bytes.toBytes("cityid")))
+      val cityname = Bytes.toString(row._2.getValue(Bytes.toBytes("r"), Bytes.toBytes("cityname")))
+      val provid = Bytes.toString(row._2.getValue(Bytes.toBytes("r"), Bytes.toBytes("provid")))
+      val provname = Bytes.toString(row._2.getValue(Bytes.toBytes("r"), Bytes.toBytes("provname")))
 
       val ma_sn = Bytes.toString(row._2.getValue(Bytes.toBytes("r"), Bytes.toBytes("ma_sn")))
       val ma_rn = Bytes.toString(row._2.getValue(Bytes.toBytes("r"), Bytes.toBytes("ma_rn")))
@@ -73,6 +85,11 @@ object AreaHtableConverter extends Logging {
         datatime,
 
         enbid,
+        enbname,
+        cityid,
+        cityname,
+        provid,
+        provname,
         if(null==ma_sn) "0" else ma_sn,
         if(null==ma_rn) "0" else ma_rn,
         if(null==a_sn) "0" else a_sn,
@@ -98,7 +115,7 @@ object AreaHtableConverter extends Logging {
     * @param htable hbase表名
     * @return
     */
-  def convertToDF(sc: SparkContext, sqlContext: SQLContext, htable: String, scanRange:Tuple2[String, String]): DataFrame = {
+  def convertToDF1(sc: SparkContext, sqlContext: SQLContext, htable: String, scanRange:Tuple2[String, String]): DataFrame = {
     // 创建hbase configuration
     val hBaseConf = HBaseConfiguration.create()
     //hBaseConf.set("hbase.zookeeper.quorum","EPC-LOG-NM-15,EPC-LOG-NM-17,EPC-LOG-NM-16")
@@ -112,7 +129,7 @@ object AreaHtableConverter extends Logging {
     hBaseConf.set(TableInputFormat.INPUT_TABLE, htable)
     // 从数据源获取数据
     val hbaseRDD = sc.newAPIHadoopRDD(hBaseConf, classOf[TableInputFormat], classOf[ImmutableBytesWritable], classOf[Result])
-    val resultDF = sqlContext.createDataFrame(hbaseRDD.map(row => parse(row)).filter(_.length!=1), struct)
+    val resultDF = sqlContext.createDataFrame(hbaseRDD.map(row => parse1(row)).filter(_.length!=1), struct1)
 
     resultDF
   }

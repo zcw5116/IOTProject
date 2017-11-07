@@ -125,20 +125,20 @@ object Test extends Logging{
     // 获取间隔的天数
     val intervalDay = DateUtils.timeInterval(beginDay, endDay, "yyyyMMdd") / (24 * 60 * 60)
     var hbaseDF: DataFrame = null
-    val targetdayid="20171012"
-    hbaseDF = OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + "20171013")
+    val targetdayid="20171028"
+    hbaseDF = OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + "20171027", ("a", "b"))
     hbaseDF.registerTempTable("onlinetest")
     val resultDFs = sqlContext.sql(
       s"""
          |select compnyAndSerAndDomain, time, o_c_3_li, o_c_3_lo, o_c_3_nlo, o_c_4_li, o_c_4_lo,
          |o_c_4_nlo, o_c_t_li, o_c_t_lo, o_c_t_nlo, o_c_3_on, o_c_4_on, o_c_t_on
-         |from onlinetest where time<='0700'
+         |from onlinetest where time<'1800'
        """.stripMargin)
 
-    val resultRDDs = resultDFs.coalesce(1).rdd.map(x=>{
+    val resultRDDs = resultDFs.coalesce(20).rdd.map(x=>{
       val compnyAndSerAndDomain = x(0)
       val time=x(1).toString
-      val targetTime = timeCalcWithFormatConvertSafe(time, "HHmm", 10*60*60, "HHmm")
+      val targetTime = time //timeCalcWithFormatConvertSafe(time, "HHmm", 10*60*60, "HHmm")
 
       val o_c_3_li = x(2).toString
       val o_c_3_lo = x(3).toString
@@ -177,7 +177,7 @@ object Test extends Logging{
 
     })
 
-    val targetTable = "analyze_summ_rst_online_20171012"
+    val targetTable = "analyze_summ_rst_online_20171029"
 
     HbaseDataUtil.saveRddToHbase(targetTable, resultRDDs)
 
@@ -187,14 +187,14 @@ object Test extends Logging{
     for (i <- 0 to intervalDay.toInt) {
       val dayid = DateUtils.timeCalcWithFormatConvertSafe(beginDay, "yyyyMMdd", i * 24 * 60 * 60, "yyyyMMdd")
       if (i == 0) {
-        hbaseDF = OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + dayid).filter(s"time > ${startM5}")
+        hbaseDF = OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + dayid, null).filter(s"time > ${startM5}")
       } else if(i < intervalDay) {
-        val tmpDF = OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + dayid)
+        val tmpDF = OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + dayid, null)
         hbaseDF = hbaseDF.unionAll(tmpDF)
       }
 
       if (i == intervalDay && intervalDay > 0) {
-        val tmpDF = OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + dayid).filter(s"time <= ${endM5}")
+        val tmpDF = OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + dayid, null).filter(s"time <= ${endM5}")
         hbaseDF = hbaseDF.unionAll(tmpDF)
       }else if(intervalDay == 0){
         hbaseDF = hbaseDF.filter(s"time <= ${endM5}")
@@ -284,7 +284,7 @@ object Test extends Logging{
     //
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
     val hisDataTime = DateUtils.timeCalcWithFormatConvertSafe(dataTime, "yyyyMMddHHmm", -hisDayNum*24*60*60, "yyyyMMddHHmm")
-    val hisDF = OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + hisDataTime.substring(0, 8)).filter("time='" + hisDataTime.substring(8, 12) + "'")
+    val hisDF = OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + hisDataTime.substring(0, 8), null).filter("time='" + hisDataTime.substring(8, 12) + "'")
 
     if(hisDF != null){
       val hisResDF = hisDF.select("compnyAndSerAndDomain", "o_c_3_on", "o_c_4_on", "o_c_t_on")

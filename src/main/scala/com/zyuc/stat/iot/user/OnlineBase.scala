@@ -21,7 +21,7 @@ object OnlineBase extends Logging{
     val hivedb = ConfigProperties.IOT_HIVE_DATABASE
     sqlContext.sql("use " + hivedb)
 
-    val appName = sc.getConf.get("spark.app.name","OnlineBase_2017100712") //
+    val appName = sc.getConf.get("spark.app.name","OnlineBase_2017110113") //
     val userInfoTable = sc.getConf.get("spark.app.table.userInfoTable", "iot_basic_userinfo")
     val userTableDataDayid = sc.getConf.get("spark.app.table.userTableDataDayid", "20170922")
     val pdsnTable = sc.getConf.get("spark.app.table.pdsnTable", "iot_cdr_data_pdsn")
@@ -65,7 +65,7 @@ object OnlineBase extends Logging{
     ///////////////////////////////////////////////////////////////////////////////////////
     var pdsnMdn =
       s"""
-         |select t.mdn, t.account_session_id, t.acct_status_type
+         |select t.mdn, t.account_session_id, t.acct_status_type, t.bsid, t.event_time
          |from ${pdsnTable} t
          |where t.d='${dayidOflast7Hourtime}'
          |      and t.h>='${last7Hourid}' and t.h<'${curHourid}'
@@ -74,12 +74,12 @@ object OnlineBase extends Logging{
     if(dayidOfCurHourtime>dayidOflast7Hourtime){
       pdsnMdn =
         s"""
-           |select t.mdn, t.account_session_id, t.acct_status_type
+           |select t.mdn, t.account_session_id, t.acct_status_type, t.bsid, t.event_time
            |from ${pdsnTable} t
            |where t.d='${dayidOflast7Hourtime}'
            |      and t.h>='${last7Hourid}'
            |union all
-           |select t.mdn, t.account_session_id, t.acct_status_type
+           |select t.mdn, t.account_session_id, t.acct_status_type, t.bsid, t.event_time
            |from ${pdsnTable} t
            |where t.d='${dayidOfCurHourtime}'
            |      and t.h<'${curHourid}'
@@ -98,7 +98,7 @@ object OnlineBase extends Logging{
 
     var haccgMdn =
       s"""
-         |select t.mdn, t.account_session_id, t.acct_status_type
+         |select t.mdn, t.account_session_id, t.acct_status_type, t.bsid, t.event_time
          |from ${haccgTable} t
          |where t.d='${dayidOflast7Hourtime}'
          |      and t.h>='${last7Hourid}' and t.h<'${curHourid}'
@@ -107,12 +107,12 @@ object OnlineBase extends Logging{
     if(dayidOfCurHourtime>dayidOflast7Hourtime){
       haccgMdn =
         s"""
-           |select t.mdn, t.account_session_id, t.acct_status_type
+           |select t.mdn, t.account_session_id, t.acct_status_type, t.bsid, t.event_time
            |from ${haccgTable} t
            |where t.d='${dayidOflast7Hourtime}'
            |      and t.h>='${last7Hourid}'
            |union all
-           |select t.mdn, t.account_session_id, t.acct_status_type
+           |select t.mdn, t.account_session_id, t.acct_status_type, t.bsid, t.event_time
            |from ${haccgTable} t
            |where t.d='${dayidOfCurHourtime}'
            |      and t.h<'${curHourid}'
@@ -130,7 +130,7 @@ object OnlineBase extends Logging{
     ///////////////////////////////////////////////////////////////////////////////////////
 
     var pgwMdn = s"""
-                    |select l_timeoffirstusage, mdn, accesspointnameni as apn
+                    |select l_timeoffirstusage, mdn, accesspointnameni as apn, bsid
                     |from ${pgwTable}
                     |where d='${dayidOfCurHourtime}' and h>=${curHourid} and h<${next2Hourid}
        """.stripMargin
@@ -159,10 +159,11 @@ object OnlineBase extends Logging{
     ///////////////////////////////////////////////////////////////////////////////////////
     val pdsnOnlineMDNTmp =
       s"""
-         |select distinct r.mdn from
+         |select  r.mdn, r.bsid, r.event_time,
+         |from
          |(
-         |    select t1.mdn, t2.mdn as mdn2 from
-         |        (select mdn, account_session_id from ${tmpPdsnTable} l1 where l1.acct_status_type<>'2') t1
+         |    select t1.mdn, t2.mdn as mdn2, t1.bsid, t1.event_time from
+         |        (select mdn, account_session_id, l1.bsid, event_time from ${tmpPdsnTable} l1 where l1.acct_status_type<>'2') t1
          |    left join
          |        (select mdn, account_session_id from ${tmpPdsnTable} l2 where l2.acct_status_type='2' ) t2
          |    on(t1.mdn=t2.mdn and t1.account_session_id=t2.account_session_id)
@@ -175,16 +176,19 @@ object OnlineBase extends Logging{
 
     val haccgOnlineMdnTmp =
       s"""
-         |select distinct r.mdn from
+         |select  r.mdn, r.bsid, r.event_time,
+         |        row_number() over(partition by r.mdn order by r.event_time desc) rn
+         |from
          |(
-         |    select t1.mdn, t2.mdn as mdn2 from
-         |        (select mdn, account_session_id from ${tmpHaccgTable} l1 where l1.acct_status_type<>'2') t1
+         |    select t1.mdn, t2.mdn as mdn2, t1.bsid, t1.event_time from
+         |        (select mdn, account_session_id, l1.bsid, event_time from ${tmpHaccgTable} l1 where l1.acct_status_type<>'2') t1
          |    left join
          |        (select mdn, account_session_id from ${tmpHaccgTable} l2 where l2.acct_status_type='2' ) t2
          |    on(t1.mdn=t2.mdn and t1.account_session_id=t2.account_session_id)
          |) r
          |where r.mdn2 is null
        """.stripMargin
+
     val haccgMDNTmpTable = "haccgMDNTmpTable_" + curHourtime
     sqlContext.sql(haccgOnlineMdnTmp).registerTempTable(haccgMDNTmpTable)
 
@@ -195,13 +199,17 @@ object OnlineBase extends Logging{
     ///////////////////////////////////////////////////////////////////////////////////////
     val g3OnlineMdnTmp = sqlContext.sql(
       s"""
-         |select distinct mdn
+         |select mdn, bsid
          |from
          |(
-         |    select mdn from ${pdsnMDNTmpTable}
+         |select mdn, bsid, row_number() over(partition by mdn order by event_time desc) rn
+         |from
+         |(
+         |    select mdn, bsid, event_time from ${pdsnMDNTmpTable}
          |    union all
-         |    select mdn from ${haccgMDNTmpTable}
+         |    select mdn, bsid, event_time from ${haccgMDNTmpTable}
          |) t
+         |) m where rn = 1
        """.stripMargin)
     val g3MDMTmpTable = "g3MDMTmpTable_" + curHourtime
     g3OnlineMdnTmp.registerTempTable(g3MDMTmpTable)

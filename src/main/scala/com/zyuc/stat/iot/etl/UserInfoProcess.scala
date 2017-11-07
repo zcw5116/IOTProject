@@ -23,6 +23,12 @@ object UserInfoProcess {
     val sc = new SparkContext(sparkConf)
     val sqlContext = new HiveContext(sc)
     sqlContext.sql("use " + ConfigProperties.IOT_HIVE_DATABASE)
+
+val cdrLocation = ""
+    val srcCDRDF = sqlContext.read.format("json").load(cdrLocation)
+    srcCDRDF.coalesce(10).write.format("orc").mode(SaveMode.Overwrite).save("/tmp/zhou")
+
+
     val appName = sc.getConf.get("spark.app.appName", "UserInfoETL")
     val dataDayid = sc.getConf.get("spark.app.dataDayid", "20170919")
     // val dataDayid = "20170714"

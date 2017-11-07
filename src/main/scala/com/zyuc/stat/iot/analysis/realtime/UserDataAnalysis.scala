@@ -82,7 +82,7 @@ object UserDataAnalysis extends Logging{
          |(case when t.devicetype in('Mobile Phone/Feature phone','Smartphone') then 0 else 1 end) ifnormal,
          | u.companycode, u.vpdndomain, u.isvpdn, u.isdirect, u.iscommon, t.devicetype, t.modelname
          |from $userInfoTable u left join ${terminalTable} t
-         |on(d='$userTableDataDayid' and  substr(u.imei,0,8) = t.tac )
+         |on(substr(u.imei,0,8) = t.tac )  where d='$userTableDataDayid'
        """.stripMargin)
 
 

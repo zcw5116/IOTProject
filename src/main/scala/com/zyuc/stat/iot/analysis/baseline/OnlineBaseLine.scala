@@ -62,14 +62,14 @@ object OnlineBaseLine {
       val dayid = DateUtils.timeCalcWithFormatConvertSafe(endDayid, "yyyyMMdd", -i*24*60*60, "yyyyMMdd")
       if(i == 0){
         println("1")
-        hbaseDF = OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + modeName + "_" + dayid).filter(s"time<'${dayM5Time}'")
+        hbaseDF = OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + modeName + "_" + dayid, null).filter(s"time<'${dayM5Time}'")
       }
       if(i== intervalDayNums){
         println("2")
-        hbaseDF = hbaseDF.unionAll(OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + modeName + "_" + dayid).filter(s"time>='${dayM5Time}'"))
+        hbaseDF = hbaseDF.unionAll(OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + modeName + "_" + dayid, null).filter(s"time>='${dayM5Time}'"))
       }
       else if(i>1){
-        hbaseDF = hbaseDF.unionAll(OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + modeName + "_" + dayid))
+        hbaseDF = hbaseDF.unionAll(OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + modeName + "_" + dayid, null))
       }
     }
 

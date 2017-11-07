@@ -84,7 +84,9 @@ object CompanyBasicInfo {
          |(case when u.usernum>=1000 then 'A' when u.usernum>=200 then 'B' else 'C' end) alevel,
          |(case when u.dnum>=1000 then 'A' when u.dnum>=200 then 'B' else 'C' end) dlevel,
          |(case when u.cnum>=1000 then 'A' when u.cnum>=200 then 'B' else 'C' end) clevel,
-         |(case when u.pnum>=1000 then 'A' when u.pnum>=200 then 'B' else 'C' end) plevel
+         |(case when u.pnum>=1000 then 'A' when u.pnum>=200 then 'B' else 'C' end) plevel,
+         |(case when u.dnum>0 then 1 else 0 end) dflag,
+         |(case when u.cnum>0 then 1 else 0 end) cflag
          |from  $companyTable c left join   $userCompanyTmpTable u
          |on(u.companycode=c.companycode)
        """.stripMargin)
@@ -103,6 +105,8 @@ object CompanyBasicInfo {
       val dlevel = x(10).toString
       val clevel = x(11).toString
       val plevel = x(12).toString
+      val dflag = x(13).toString
+      val cflag = x(14).toString
 
       val put = new Put(Bytes.toBytes(comcode))
       val aPut = new Put(Bytes.toBytes(comcode + "_-1_-1"))
@@ -114,6 +118,8 @@ object CompanyBasicInfo {
       put.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("provincename"), Bytes.toBytes(proname))
       put.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("companyname"), Bytes.toBytes(comName))
       put.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("vpdndomain"), Bytes.toBytes(domain))
+      put.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("dflag"), Bytes.toBytes(dflag))
+      put.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("cflag"), Bytes.toBytes(cflag))
       put.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("monilevel_autocalc"), Bytes.toBytes(alevel))
       put.addColumn(Bytes.toBytes("cardcnt"), Bytes.toBytes("cnt_latest"), Bytes.toBytes(usernum))
       put.addColumn(Bytes.toBytes("cardcnt"), Bytes.toBytes("date_latest"), Bytes.toBytes(userTablePartitionID.toString))

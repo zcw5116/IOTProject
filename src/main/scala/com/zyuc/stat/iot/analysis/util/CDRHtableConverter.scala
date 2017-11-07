@@ -47,7 +47,7 @@ object CDRHtableConverter extends Logging {
       val compnyAndSerAndDomain = rkey.substring(0, rkey.lastIndexOf("_"))
       val time = rkey.substring(rkey.lastIndexOf("_") + 1)
 
-      val f_c_3_u = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("f_c_3_d")))
+      val f_c_3_u = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("f_c_3_u")))
       val f_c_3_d = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("f_c_3_d")))
       val f_c_3_t = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("f_c_3_t")))
       val f_c_4_u = Bytes.toString(row._2.getValue(Bytes.toBytes("s"), Bytes.toBytes("f_c_4_u")))
