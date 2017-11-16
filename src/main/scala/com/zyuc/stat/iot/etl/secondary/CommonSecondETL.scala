@@ -38,7 +38,7 @@ object CommonSecondETL extends Logging{
     logInfo("##########--outputPath:  " + outputPath)
     logInfo("##########--storedtable: " + SecondaryETLTable)
     logInfo("##########--itemType:    " + itemType)
-    logInfo("##########--timeid:      "  + timeid)
+    logInfo("##########--timeid:      " + timeid)
     logInfo("##########--cyctype:     " + cyctype)
 
 
@@ -224,6 +224,7 @@ object CommonSecondETL extends Logging{
           sourceDF.col("vpdncompanycode"),sourceDF.col("custprovince"),sourceDF.col("cellid"),sourceDF.col("bsid")).
           withColumn("d", lit(partitionD)).withColumn("h", lit(partitionH))
       }
+
 
       if(cyctype =="d"){
         resultDF = sourceDF.select(sourceDF.col("mdn"),sourceDF.col("account_session_id"),sourceDF.col("acct_status_type"),
