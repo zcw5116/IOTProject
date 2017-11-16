@@ -17,8 +17,9 @@ object IotTerminalAnaly extends Logging{
     val sc = new SparkContext(sparkConf)
     val sqlContext = new HiveContext(sc)
     sqlContext.sql("use " + ConfigProperties.IOT_HIVE_DATABASE)
-    val userTable = sc.getConf.get("spark.app.user.tableName")     // "iot_customer_userinfo"
-    val userTablePartitionDayid = sc.getConf.get("spark.app.user.userTablePartitionDayid")  //  "20170801"
+    val userTable = sc.getConf.get("spark.app.user.tableName","iot_basic_userinfo")     // "iot_customer_userinfo"
+    val userTablePartitionDayid:String = sc.getConf.get("spark.app.user.userTablePartitionDayid")  //  "20170801"
+    val partiondayid = sc.getConf.get("spark.app.user.dayid",userTablePartitionDayid)  //  "20170801"
     val terminalInputPath = sc.getConf.get("spark.app.terminalInputPath")  // /hadoop/IOT/data/terminal/output/data/
     val terminalOutputPath = sc.getConf.get("spark.app.terminalOutputPath")  // /hadoop/IOT/data/terminal/output/
     val localOutputPath = sc.getConf.get("spark.app.localOutputPath")  // /slview/test/zcw/shell/terminal/json/
@@ -32,6 +33,10 @@ object IotTerminalAnaly extends Logging{
     val terminalLocation = terminalInputPath + "/data"
     val terminalDF = sqlContext.read.format("orc").load(terminalLocation)
 
+
+
+    logInfo("##########--partiondayid:"+partiondayid)
+    logInfo("##########--userTablePartitionDayid:"+userTablePartitionDayid)
 
     val userDF = sqlContext.table(userTable).filter("d=" + userTablePartitionDayid).
       selectExpr("mdn", "imei", "case when length(belo_prov)=0 or belo_prov is null then '其他' else belo_prov end  as custprovince",
@@ -47,19 +52,19 @@ object IotTerminalAnaly extends Logging{
 
 
     // 处理空值
-    val resultDF = aggDF.select(lit(userTablePartitionDayid).alias("datetime"),
+    val resultDF = aggDF.select(lit(partiondayid).alias("datetime"),
       when(aggDF.col("custprovince").isNull, "其他").otherwise(aggDF.col("custprovince")).alias("custprovince"),
-      when(aggDF.col("vpdncompanycode").isNull, "N999999999").otherwise(aggDF.col("vpdncompanycode")).alias("companycode"),
+      when(aggDF.col("vpdncompanycode").isNull, "P999999999").otherwise(aggDF.col("vpdncompanycode")).alias("companycode"),
       when(aggDF.col("devicetype").isNull, "").otherwise(aggDF.col("devicetype")).alias("devicetype"),
       when(aggDF.col("modelname").isNull, "").otherwise(aggDF.col("modelname")).alias("modelname"),
       aggDF.col("tercnt"))
 
 
-    val terminalOutputLocatoin = terminalOutputPath  + "tmp/" + userTablePartitionDayid+"/"
-
+    val terminalOutputLocatoin = terminalOutputPath  + "tmp/" + partiondayid+"/"
+    val timeid = partiondayid
     resultDF.repartition(coalesceNum.toInt).write.mode(SaveMode.Overwrite).format("json").save(terminalOutputLocatoin)
-    FileUtils.moveTempFilesToESpath(fileSystem,terminalOutputPath,userTablePartitionDayid,userTablePartitionDayid)
-    //FileUtils.downFilesToLocal(fileSystem, terminalOutputLocatoin, localOutputPath, userTablePartitionDayid, ".json")
+    FileUtils.moveTempFilesToESpath(fileSystem,terminalOutputPath,partiondayid,timeid)
+    //FileUtils.downFilesToLocal(fileSystem, terminalOutputLocatoin, localOutputPath, partiondayid, ".json")
 
   }
 }

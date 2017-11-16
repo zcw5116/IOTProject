@@ -23,9 +23,9 @@ object CardAnalysis {
 
     val appName =  sc.getConf.get("spark.app.name")
     val userTablePartitionID = sc.getConf.get("spark.app.userTablePartitionID")
-    val userTable = sc.getConf.get("spark.app.table.userTable") //"iot_customer_userinfo"
+    val userTable = sc.getConf.get("spark.app.table.userTable","iot_basic_userinfo") //"iot_customer_userinfo" => 'iot_basic_userinfo'
     val operTable = sc.getConf.get("spark.app.table.operaLogTable") //"iot_operlog_data_day"
-    val onlineTable = sc.getConf.get("spark.app.table.onlineTable") //"iot_analy_online_day"===> iot_useronline_base_nums
+    val onlineTable = sc.getConf.get("spark.app.table.onlineTable","iot_useronline_base_nums") //"iot_analy_online_day"===> iot_useronline_base_nums
     val activedUserTable = sc.getConf.get("spark.app.table.activedUserTable") //"iot_activeduser_data_day"
     //val companyInfoTable = sc.getConf.get("spark.app.table.companyInfo") //"iot_activeduser_data_day"
     val dayid = sc.getConf.get("spark.app.dayid")
