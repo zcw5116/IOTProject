@@ -1,7 +1,6 @@
 package test
 
 
-import org.apache.commons.lang3.time.DateUtils
 import org.joda.time.DateTime
 import org.joda.time.format.DateTimeFormat
 
@@ -43,7 +42,7 @@ object test1 {
     val lastday =  DateTime.parse(firstday,DateTimeFormat.forPattern("yyyyMMdd")).plusWeeks(1).minusDays(1).toString("yyyyMMdd")
     println("lastday:  "+lastday)
     var a:Map[String,String] = Map()
-    a = DateUtils.getWeeks(sometime,format)
+    //a = DateUtils.getWeeks(sometime,format)
     println("a :  "+a )
 
 
@@ -64,7 +63,13 @@ object test1 {
     val abd = "a_v_v_d"
 
     var array1:String = abd.split("_",4)(1)
-    println("array:"+array)
+    val cdf = "dbc"
+    array1 = abd.split("_",4)(1)
+    //println("array1:"+array1)
+
+    //test map
+
+
   }
 
 }

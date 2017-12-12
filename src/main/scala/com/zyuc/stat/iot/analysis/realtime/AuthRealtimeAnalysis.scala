@@ -31,7 +31,7 @@ object AuthRealtimeAnalysis extends Logging{
     sqlContext.sql("use " + ConfigProperties.IOT_HIVE_DATABASE)
 
     // 获取参数
-    val appName = sc.getConf.get("spark.app.name","name_201708010040") // name_201708010040
+    val appName = sc.getConf.get("spark.app.name","name_201710230840") // name_201708010040
     val userInfoTable = sc.getConf.get("spark.app.table.userInfoTable", "iot_basic_userinfo") //
     val userAndDomainTable = sc.getConf.get("spark.app.table.userAndDomainTable", "iot_basic_user_and_domain")
     val companyAndDomainTable = sc.getConf.get("spark.app.table.companyAndDomainTable", "iot_basic_company_and_domain")
@@ -40,9 +40,10 @@ object AuthRealtimeAnalysis extends Logging{
     val auth3gTable = sc.getConf.get("spark.app.table.auth3gTable", "iot_userauth_3gaaa")
     val auth4gTable = sc.getConf.get("spark.app.table.auth4gTable", "iot_userauth_4gaaa")
     val authVPDNTable = sc.getConf.get("spark.app.table.authVPDNTable", "iot_userauth_vpdn")
-    val alarmHtablePre = sc.getConf.get("spark.app.htable.alarmTablePre", "analyze_summ_tab_")
-    val resultHtablePre = sc.getConf.get("spark.app.htable.resultHtablePre", "analyze_summ_rst_everycycle_")
+    val alarmHtablePre = sc.getConf.get("spark.app.htable.alarmTablePre", "analyze_summ_tab_auth_")
+    val resultHtablePre = sc.getConf.get("spark.app.htable.resultHtablePre", "analyze_summ_rst_auth_")
     val resultDayHtable = sc.getConf.get("spark.app.htable.resultDayHtable", "analyze_summ_rst_everyday")
+    val resultBSHtable = sc.getConf.get("spark.app.htable.resultBSHtable", "analyze_summ_rst_bs")
     val analyzeBPHtable = sc.getConf.get("spark.app.htable.analyzeBPHtable", "analyze_bp_tab")
 
 
@@ -84,8 +85,9 @@ object AuthRealtimeAnalysis extends Logging{
     //  curAlarmHtable-当前时刻的预警表,  nextAlarmHtable-下一时刻的预警表,
     val curAlarmHtable = alarmHtablePre + dataTime.substring(0,8)
     val nextAlarmHtable = alarmHtablePre + nextDataTime.substring(0,8)
-    val alarmFamilies = new Array[String](1)
+    val alarmFamilies = new Array[String](2)
     alarmFamilies(0) = "s"
+    alarmFamilies(1) = "e"
     // 创建表, 如果表存在， 自动忽略
     HbaseUtils.createIfNotExists(curAlarmHtable,alarmFamilies)
     HbaseUtils.createIfNotExists(nextAlarmHtable,alarmFamilies)
@@ -109,12 +111,15 @@ object AuthRealtimeAnalysis extends Logging{
     analyzeBPFamilies(0) = "bp"
     HbaseUtils.createIfNotExists(analyzeBPHtable, analyzeBPFamilies)
 
-
+    // resultBSHtable
+    val bsFamilies = new Array[String](1)
+    bsFamilies(0) = "r"
+    HbaseUtils.createIfNotExists(resultBSHtable, bsFamilies)
     ////////////////////////////////////////////////////////////////
     //   cache table
     ///////////////////////////////////////////////////////////////
     val userInfoTableCached = "userInfoTableCached"
-    sqlContext.sql(s"cache table ${userInfoTableCached} as select mdn, imsicdma, companycode, vpdndomain, isvpdn, isdirect from $userInfoTable where d=$userTableDataDayid")
+    sqlContext.sql(s"cache table ${userInfoTableCached} as select mdn, imsicdma, companycode, vpdndomain, isvpdn, isdirect, iscommon from $userInfoTable where d=$userTableDataDayid")
 
     //val userAndDomainTableCached = "userAndDomainTableCached"
     //sqlContext.sql(s"cache table ${userAndDomainTableCached} as select mdn, companycode, isvpdn, vpdndomain from $userAndDomainTable where d=$userTableDataDayid")
@@ -126,7 +131,7 @@ object AuthRealtimeAnalysis extends Logging{
          |select u.companycode, m.type, m.mdn,
          |(case when u.isdirect=1 then 'D' when u.isvpdn=1 and array_contains(split(vpdndomain,','), m.mdndomain) then 'C' else 'P' end) as servtype,
          |(case when u.isdirect != 1  and u.isvpdn=1 and array_contains(split(vpdndomain,','), m.mdndomain) then m.mdndomain else '-1' end) as mdndomain,
-         |auth_result, nasportid, result
+         |auth_result, nasportid as bsid, result
          |from
          |(
          |select '3g' type, u.mdn,
@@ -198,7 +203,7 @@ object AuthRealtimeAnalysis extends Logging{
        """.stripMargin
 
     // 对域名为-1的记录做过滤
-    val statDF = sqlContext.sql(statSQL).filter("vpdndomain is null or vpdndomain!='-1'").coalesce(1)
+    val statDF = sqlContext.sql(statSQL).filter("vpdndomain is null or vpdndomain!='-1'")
 
     /*
     statDF.filter("companycode='P100002368'").show
@@ -221,7 +226,7 @@ object AuthRealtimeAnalysis extends Logging{
       */
 
 
-    val resultRDD = statDF.rdd.map(x=>{
+    val resultRDD = statDF.repartition(10).rdd.map(x=>{
       val companyCode = x(0).toString
       val servType = if(null == x(1)) "-1" else x(1).toString
       val servFlag = if(servType == "D") "D" else if(servType == "C") "C"  else if(servType == "P") "P"  else "-1"
@@ -291,6 +296,40 @@ object AuthRealtimeAnalysis extends Logging{
     HbaseDataUtil.saveRddToHbase(resultDayHtable, resultRDD.map(x=>x._5))
 
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //   基站数据
+    //
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    val bsSQL =
+      s"""
+         |select companycode, servtype, mdndomain, bsid,
+         |       count(*) as rn,
+         |       sum(case when result='s' then 1 else 0 end) rsn
+         |from ${mdnTable}  where type='3g'
+         |group by companycode, servtype, mdndomain, bsid
+         |grouping sets((companycode, servtype, bsid), (companycode, servtype, mdndomain, bsid))
+       """.stripMargin
+
+    val bsResultDF = sqlContext.sql(bsSQL).filter("mdndomain is null or mdndomain!='-1'").coalesce(10)
+
+    val bsResultRDD = bsResultDF.rdd.map(x=>{
+      val c = if( null == x(0)) "-1" else x(0).toString // companycode
+      val s = if(null == x(1)) "-1" else x(1).toString // servicetype
+      val v = if(null == x(2)) "-1" else x(2).toString // vpdndomain
+      val bid = if(null == x(3)) "0" else x(3).toString //enbid为空的置为0
+      val rn = x(4).toString // reqcnt
+      val rsn = x(5).toString // request success cnt
+
+      val rkey = dataTime + "_3g_" + c + "_" + s + "_" + v + "_" + bid
+      val put = new Put(Bytes.toBytes(rkey))
+      put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_rn"), Bytes.toBytes(rn))
+      put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_sn"), Bytes.toBytes(rsn))
+      (new ImmutableBytesWritable, put)
+    })
+    HbaseDataUtil.saveRddToHbase(resultBSHtable, bsResultRDD)
+
+
+
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
     //   失败原因写入
@@ -309,7 +348,7 @@ object AuthRealtimeAnalysis extends Logging{
        """.stripMargin
 
     val failedDF = sqlContext.sql(failedSQL).filter("mdndomain is null or mdndomain!='-1'").coalesce(1)
-    val failedRDD = failedDF.rdd.map(x=>{
+    val failedRDD = failedDF.repartition(10).rdd.map(x=>{
       val companyCode = x(0).toString
       val servType = if(null == x(1)) "-1" else x(1).toString
       val servFlag = if(servType == "D") "D" else if(servType == "C") "C"  else if(servType == "P") "P"  else "-1"
@@ -319,11 +358,17 @@ object AuthRealtimeAnalysis extends Logging{
       val errcode = if(null == x(4)) "-1" else x(4).toString
       val errCnt = x(5).toString
       val curResKey = companyCode +"_" + servType + "_" + domain + "_" + dataTime.substring(8,12)
+      val curAlarmRowkey = progRunType + "_" + dataTime.substring(8,12) + "_" + companyCode + "_" + servType + "_" + domain
+
       val curResPut = new Put(Bytes.toBytes(curResKey))
+      val curAlarmPut = new Put(Bytes.toBytes(curResKey))
       curResPut.addColumn(Bytes.toBytes("e"), Bytes.toBytes("a_" + netFlag + "_" + errcode + "_cnt"), Bytes.toBytes(errCnt))
-      (new ImmutableBytesWritable, curResPut)
+      curAlarmPut.addColumn(Bytes.toBytes("e"), Bytes.toBytes("a_" + netFlag + "_" + errcode + "_cnt"), Bytes.toBytes(errCnt))
+
+      ((new ImmutableBytesWritable, curResPut),(new ImmutableBytesWritable, curAlarmPut))
     })
-    HbaseDataUtil.saveRddToHbase(curResultHtable, failedRDD)
+    HbaseDataUtil.saveRddToHbase(curResultHtable, failedRDD.map(_._1))
+    HbaseDataUtil.saveRddToHbase(curResultHtable, failedRDD.map(_._2))
 
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -332,6 +377,7 @@ object AuthRealtimeAnalysis extends Logging{
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
     val preDataTime = DateUtils.timeCalcWithFormatConvertSafe(dataTime, "yyyyMMddHHmm", -5*60, "yyyyMMddHHmm")
     val curHbaseDF = AuthHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + preDataTime.substring(0, 8))
+
     var resultDF = curHbaseDF.filter("time>='0005'")
     if(preDataTime.substring(0, 8) != dataTime.substring(0, 8)){
       val nextHbaseDF = AuthHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + dataTime.substring(0, 8))
@@ -346,7 +392,7 @@ object AuthRealtimeAnalysis extends Logging{
       sum("a_c_v_rn").as("req_vpdn_sum"),sum("a_c_v_sn").as("req_vpdn_succ_sum"),
       sum("a_c_t_rn").as("req_total_sum"),sum("a_c_t_sn").as("req_total_succ_sum"))
 
-    val accumRDD = accumDF.coalesce(1).rdd.map(x=>{
+    val accumRDD = accumDF.repartition(8).rdd.map(x=>{
       val rkey = preDataTime.substring(2, 8) + "_" + x(0).toString
       val dayResPut = new Put(Bytes.toBytes(rkey))
       val req_3g_sum = x(1).toString
@@ -391,7 +437,7 @@ object AuthRealtimeAnalysis extends Logging{
         "a_c_4_sn", "a_c_v_rn", "a_c_v_sn", "a_c_t_rn", "a_c_t_sn",
         "a_c_3_rat", "a_c_4_rat", "a_c_v_rat", "a_c_t_rat")
 
-     val hisResRDD = hisResDF.rdd.map(x=>{
+     val hisResRDD = hisResDF.repartition(10).rdd.map(x=>{
         val rkey = dataTime.substring(2, 8) + "_" + x(0).toString
         val req_3g_cnt = x(1).toString
         val req_succ_3g_cnt = x(2).toString
@@ -427,7 +473,7 @@ object AuthRealtimeAnalysis extends Logging{
 
       })
 
-      HbaseDataUtil.saveRddToHbase(resultDayHtable, hisResRDD)
+      // HbaseDataUtil.saveRddToHbase(resultDayHtable, hisResRDD)
     }
 
 

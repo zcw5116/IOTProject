@@ -18,6 +18,7 @@ import org.apache.spark.sql.functions._
 
 /**
   * Created by zhoucw on 17-9-7.
+  * @deprecated
   */
 object CDRBaseLine {
   def registerRDD(sc:SparkContext, hCDRTable:String):RDD[HbaseCDRFlow] = {

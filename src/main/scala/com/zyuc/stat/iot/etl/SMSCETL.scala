@@ -1,5 +1,6 @@
 package com.zyuc.stat.iot.etl
 
+import com.zyuc.stat.iot.etl.CDRETL.logInfo
 import com.zyuc.stat.iot.etl.util.CDRConverterUtils.logError
 import com.zyuc.stat.iot.etl.util.{CDRConverterUtils, CommonETLUtils}
 import com.zyuc.stat.properties.ConfigProperties
@@ -21,7 +22,8 @@ object SMSCETL extends Logging{
     val sc = new SparkContext(sparkConf)
     val sqlContext = new HiveContext(sc)
 
-    val loadTime = "201709271456"
+    //val loadTime = "201709271456"
+    val loadTime = sc.getConf.get("spark.app.loadTime", "201709271456") //
     val inputPath = "hdfs://EPC-IOT-ES-06:8020/hadoop/IOT/data/smsc/srcdata/smsc/"
     val outputPath = "hdfs://EPC-IOT-ES-06:8020/hadoop/IOT/data/smsc/output/smsc/"
 
@@ -55,6 +57,17 @@ object SMSCETL extends Logging{
       return "appName:" + appName + ": " + s"$srcLocation rename to $srcDoingLocation :" + result + ". "
     }
     logInfo(s"$srcLocation rename to $srcDoingLocation :" + result)
+
+    //数据来源
+    val smssLocation = srcDoingLocation + "/" + fileWildcard
+    val smssFileExists = if (fileSystem.globStatus(new Path(smssLocation)).length > 0) true else false
+
+    if (!smssFileExists) {
+      logInfo("No Files during time: " + loadTime)
+      // System.exit(1)
+      return "appName:" + appName + ":No Files ."
+    }
+
     //第三步：清洗数据，转换成dataframe
     val smscLocation = srcDoingLocation + "/" + fileWildcard
     val srcSmscDF = sqlContext.read.format("json").load(smscLocation)
@@ -125,11 +138,6 @@ object SMSCETL extends Logging{
       logError(logTypeErr)
       msg += logTypeErr
     }
-    if(coalesceSize!=0){
-      val logTypeErr = "[" + appName + "] 日志coalesceSize为空\n"
-      logError(logTypeErr)
-      msg += logTypeErr
-    }
     if(logType.isEmpty){
       val logTypeErr = "[" + appName + "] 日志类型logType错误, 期望值： smsc\n"
       logError(logTypeErr)
@@ -140,20 +148,7 @@ object SMSCETL extends Logging{
       logError(logTypeErr)
       msg += logTypeErr
     }
-    //数据来源
-    val srcLocation = inputPath + "/" + loadTime
-    val fileExists = if (fileSystem.globStatus(new Path(srcLocation + "/*")).length > 0) true else false
-    if (!fileExists) {
-      logInfo(s"$srcLocation not exists.")
-      msg+=s"$srcLocation not exists.\n"
-    }
-    val srcDoingLocation = inputPath + "/" + loadTime + "_doing"
-    val smscLocation = srcDoingLocation + "/" + fileWildcard
-    val authFileExists = if (fileSystem.globStatus(new Path(smscLocation)).length > 0) true else false
-    if (!authFileExists) {
-      logInfo("No Files during time: " + loadTime)
-      msg+="appName:" + appName + ":No Files .\n"
-    }
+
     msg
   }
 

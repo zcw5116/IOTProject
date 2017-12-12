@@ -91,7 +91,7 @@ object ConvertServer {
             val logType = Params.getString("logType")
             val logTableName = Params.getString("logTableName")
             serverInfo = "未知异常"
-            SMSCETL.doJob(sqlContext, fileSystem, appName, loadTime, inputPath, outputPath, fileWildcard, coalesceSize.toInt, logType, logTableName)
+            serverInfo = SMSCETL.doJob(sqlContext, fileSystem, appName, loadTime, inputPath, outputPath, fileWildcard, coalesceSize.toInt, logType, logTableName)
           } else {
             System.out.println("go")
           }

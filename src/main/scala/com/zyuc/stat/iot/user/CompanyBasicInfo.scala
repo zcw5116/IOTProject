@@ -24,6 +24,7 @@ object CompanyBasicInfo {
     val userTable = sc.getConf.get("spark.app.table.userTable", "iot_basic_userinfo") //"iot_basic_userinfo"
     val userAndDomainTable = sc.getConf.get("spark.app.table.userAndDomain", "iot_basic_user_and_domain") //"iot_basic_user_and_domain"
     val companyAndDomain = sc.getConf.get("spark.app.table.companyAndDomain", "iot_basic_company_and_domain") //"iot_basic_company_and_domain"
+    val companyNameFile = sc.getConf.get("spark.app.companyNameFile", "/hadoop/IOT/ANALY_PLATFORM/BasicData/BaseInfo/map_iot_company.yml")//
     val companyHtable = sc.getConf.get("spark.app.htable.companyHtable", "iot_company_basic")
     val companyVpdnHtable = sc.getConf.get("spark.app.htable.companyVpdnHtable", "iot_company_split")
     // val ifUpdateLatestInfo = sc.getConf.get("spark.app.ifUpdateLatestInfo","1") //  是否更新iot_basic_companyinfo的latestdate和cnt_latest, 0-不更新， 1-更新
@@ -41,18 +42,28 @@ object CompanyBasicInfo {
     HbaseUtils.createIfNotExists(companyHtable, companyFamilies)
     HbaseUtils.createIfNotExists(companyVpdnHtable, companyVpdnFamilies)
 
+    // 关联企业名称
+    import sqlContext.implicits._
+    val companyNameDF = sqlContext.read.format("text").load(companyNameFile).map(x=>x.getString(0).replaceAll(" ","").split(":", 2)).map(x=>(x(0).trim, x(1).trim)).toDF("companyname", "companycode")
+    val companNameDimTable = "companNameDimTable"
+    companyNameDF.registerTempTable(companNameDimTable)
 
     val companyTable = "companyTable_" + userTablePartitionID
     sqlContext.sql(
       s"""
          |cache table ${companyTable} as
+         |select t.provincecode, t.provincename, t.companycode, d.companyname, t.vpdndomain
+         |from
+         |(
          |select provincecode, provincename, companycode, vpdndomain
          |from
          |(
-         |    select provincecode, provincename, companycode, vpdndomain,
+         |    select provincecode, provincename, companycode, (case when length(vpdndomain)=0 then null else vpdndomain end) as vpdndomain,
          |           row_number() over(partition by companycode) rn
          |    from ${companyAndDomain}
          |) c where c.rn=1
+         |) t left join ${companNameDimTable} d
+         |on(t.companycode=d.companycode)
        """.stripMargin)
 
     val userCompanyTmpTable = appName + "_userCompanyTmpTable"
@@ -68,29 +79,34 @@ object CompanyBasicInfo {
 
     val resultDF = sqlContext.sql(
       s"""select c.provincecode, c.provincename,
-         |c.companycode, c.vpdndomain, nvl(u.usernum,0) usernum,
-         |u.dnum, u.cnum, u.pnum,
+         |c.companycode, c.companyname, c.vpdndomain, nvl(u.usernum,0) usernum,
+         |nvl(u.dnum,0) dnum, nvl(u.cnum,0) cnum, nvl(u.pnum,0) pnum,
          |(case when u.usernum>=1000 then 'A' when u.usernum>=200 then 'B' else 'C' end) alevel,
          |(case when u.dnum>=1000 then 'A' when u.dnum>=200 then 'B' else 'C' end) dlevel,
          |(case when u.cnum>=1000 then 'A' when u.cnum>=200 then 'B' else 'C' end) clevel,
-         |(case when u.pnum>=1000 then 'A' when u.pnum>=200 then 'B' else 'C' end) plevel
+         |(case when u.pnum>=1000 then 'A' when u.pnum>=200 then 'B' else 'C' end) plevel,
+         |(case when u.dnum>0 then 1 else 0 end) dflag,
+         |(case when u.cnum>0 then 1 else 0 end) cflag
          |from  $companyTable c left join   $userCompanyTmpTable u
          |on(u.companycode=c.companycode)
        """.stripMargin)
 
     val companyRDD = resultDF.coalesce(1).rdd.map(x=>{
-      val procode = x(0).toString
-      val proname = x(1).toString
-      val comcode = if (null == x(2).toString || ""==x(2).toString) "-1" else x(2).toString
-      val domain = x(3).toString
-      val usernum = x(4).toString
-      val dnum = x(5).toString
-      val cnum = x(6).toString
-      val pnum = x(7).toString
-      val alevel = x(8).toString
-      val dlevel = x(8).toString
-      val clevel = x(8).toString
-      val plevel = x(8).toString
+      val procode = if (null == x(0) || ""==x(0).toString) "-1" else x(0).toString
+      val proname = if (null == x(1) || ""==x(1).toString) "-1" else x(1).toString
+      val comcode = if (null == x(2) || ""==x(2).toString) "-1" else x(2).toString
+      val comName = if(null == x(3) || ""==x(3).toString) "-1" else x(3).toString
+      val domain = if (null == x(4) || ""==x(4).toString) "-1" else x(4).toString
+      val usernum = x(5).toString
+      val dnum = x(6).toString
+      val cnum = x(7).toString
+      val pnum = x(8).toString
+      val alevel = x(9).toString
+      val dlevel = x(10).toString
+      val clevel = x(11).toString
+      val plevel = x(12).toString
+      val dflag = x(13).toString
+      val cflag = x(14).toString
 
       val put = new Put(Bytes.toBytes(comcode))
       val aPut = new Put(Bytes.toBytes(comcode + "_-1_-1"))
@@ -100,7 +116,10 @@ object CompanyBasicInfo {
 
       put.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("provincecode"), Bytes.toBytes(procode))
       put.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("provincename"), Bytes.toBytes(proname))
+      put.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("companyname"), Bytes.toBytes(comName))
       put.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("vpdndomain"), Bytes.toBytes(domain))
+      put.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("dflag"), Bytes.toBytes(dflag))
+      put.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("cflag"), Bytes.toBytes(cflag))
       put.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("monilevel_autocalc"), Bytes.toBytes(alevel))
       put.addColumn(Bytes.toBytes("cardcnt"), Bytes.toBytes("cnt_latest"), Bytes.toBytes(usernum))
       put.addColumn(Bytes.toBytes("cardcnt"), Bytes.toBytes("date_latest"), Bytes.toBytes(userTablePartitionID.toString))
@@ -108,6 +127,7 @@ object CompanyBasicInfo {
 
       aPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("provincecode"), Bytes.toBytes(procode))
       aPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("provincename"), Bytes.toBytes(proname))
+      aPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("companyname"), Bytes.toBytes(comName))
       aPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("vpdndomain"), Bytes.toBytes(domain))
       aPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("monilevel_autocalc"), Bytes.toBytes(alevel))
       aPut.addColumn(Bytes.toBytes("cardcnt"), Bytes.toBytes("cnt_latest"), Bytes.toBytes(usernum))
@@ -116,6 +136,7 @@ object CompanyBasicInfo {
 
       dPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("provincecode"), Bytes.toBytes(procode))
       dPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("provincename"), Bytes.toBytes(proname))
+      dPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("companyname"), Bytes.toBytes(comName))
       dPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("vpdndomain"), Bytes.toBytes(domain))
       dPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("monilevel_autocalc"), Bytes.toBytes(dlevel))
       dPut.addColumn(Bytes.toBytes("cardcnt"), Bytes.toBytes("cnt_latest"), Bytes.toBytes(dnum))
@@ -124,7 +145,7 @@ object CompanyBasicInfo {
 
       cPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("provincecode"), Bytes.toBytes(procode))
       cPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("provincename"), Bytes.toBytes(proname))
-      //cPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("vpdndomain"), Bytes.toBytes(domain))
+      cPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("companyname"), Bytes.toBytes(comName))
       cPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("monilevel_autocalc"), Bytes.toBytes(clevel))
       cPut.addColumn(Bytes.toBytes("cardcnt"), Bytes.toBytes("cnt_latest"), Bytes.toBytes(cnum))
       cPut.addColumn(Bytes.toBytes("cardcnt"), Bytes.toBytes("date_latest"), Bytes.toBytes(userTablePartitionID.toString))
@@ -132,7 +153,7 @@ object CompanyBasicInfo {
 
       pPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("provincecode"), Bytes.toBytes(procode))
       pPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("provincename"), Bytes.toBytes(proname))
-      //pPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("vpdndomain"), Bytes.toBytes(domain))
+      pPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("companyname"), Bytes.toBytes(comName))
       pPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("monilevel_autocalc"), Bytes.toBytes(plevel))
       pPut.addColumn(Bytes.toBytes("cardcnt"), Bytes.toBytes("cnt_latest"), Bytes.toBytes(pnum))
       pPut.addColumn(Bytes.toBytes("cardcnt"), Bytes.toBytes("date_latest"), Bytes.toBytes(userTablePartitionID.toString))
@@ -149,7 +170,7 @@ object CompanyBasicInfo {
 
     val companyDomainDF = sqlContext.sql(
       s"""
-         |select c.provincecode, c.provincename, c.companycode, m.vpdndomain, m.usernum,
+         |select c.provincecode, c.provincename, c.companycode, c.companyname, m.vpdndomain, m.usernum,
          |(case when m.usernum>=1000 then 'A' when m.usernum>=200 then 'B' else 'C' end) monilevel
          |from
          |(
@@ -164,15 +185,17 @@ object CompanyBasicInfo {
       val procode = if(null == x(0)) "-1" else x(0).toString
       val proname = if(null == x(1)) "-1" else x(1).toString
       val comcode = if (null == x(2) || ""== x(2)) "-1" else x(2).toString
-      val domain = if(null == x(3) || ""== x(3)) "-1" else x(3).toString
-      val usernum = x(4).toString
-      val level = x(5).toString
+      val comName = if (null == x(3) || ""== x(3)) "-1" else x(3).toString
+      val domain = if(null == x(4) || ""== x(4)) "-1" else x(4).toString
+      val usernum = x(5).toString
+      val level = x(6).toString
       val rowkey = comcode + "_" + "C" + "_" + domain
       val vpdnPut = new Put(Bytes.toBytes(rowkey))
 
       vpdnPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("provincecode"), Bytes.toBytes(procode))
       vpdnPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("provincename"), Bytes.toBytes(proname))
       vpdnPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("companycode"), Bytes.toBytes(comcode))
+      vpdnPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("companyname"), Bytes.toBytes(comName))
       vpdnPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("vpdndomain"), Bytes.toBytes(domain))
       vpdnPut.addColumn(Bytes.toBytes("basicinfo"), Bytes.toBytes("monilevel_autocalc"), Bytes.toBytes(level))
       vpdnPut.addColumn(Bytes.toBytes("cardcnt"), Bytes.toBytes("cnt_latest"), Bytes.toBytes(usernum))

@@ -58,7 +58,7 @@ object SparkKafkaUtils extends Serializable with Logging {
         // 拼接zkTopicPath
         val zkTopicPath = "/consumers/" + groupName + "/offsets/" + topic
 
-        // 查询该路径下是否字节点（默认有字节点为我们自己保存不同 partition 时生成的）
+        // 查询该路径下是否子节点（默认有子节点为我们自己保存不同 partition 时生成的）
         val children = zkClient.countChildren(zkTopicPath)
         logInfo("children is " + children)
 

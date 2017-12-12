@@ -1,12 +1,12 @@
 package com.zyuc.stat.iot.analysis.realtime
 
-import com.zyuc.stat.iot.analysis.util.{AuthHtableConverter, HbaseDataUtil}
+import com.zyuc.stat.iot.analysis.util.{CDRHtableConverter, HbaseDataUtil}
 import com.zyuc.stat.properties.ConfigProperties
-import com.zyuc.stat.utils.{DateUtils, HbaseUtils, MathUtil}
+import com.zyuc.stat.utils.{DateUtils, HbaseUtils}
 import org.apache.hadoop.hbase.client.Put
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable
 import org.apache.hadoop.hbase.util.Bytes
-import org.apache.spark.sql.functions.{sum, _}
+import org.apache.spark.sql.functions.sum
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{Logging, SparkConf, SparkContext}
 
@@ -39,7 +39,7 @@ object CDRRealtimeAnalysis extends Logging{
     sqlContext.sql("use " + ConfigProperties.IOT_HIVE_DATABASE)
 
     // 获取参数
-    val appName = sc.getConf.get("spark.app.name","name_201710070040") // name_201708010040
+    val appName = sc.getConf.get("spark.app.name","name_201710251500") // name_201708010040
     val userInfoTable = sc.getConf.get("spark.app.table.userInfoTable", "iot_basic_userinfo") //
     val userAndDomainTable = sc.getConf.get("spark.app.table.userAndDomainTable", "iot_basic_user_and_domain")
     val companyAndDomainTable = sc.getConf.get("spark.app.table.companyAndDomainTable", "iot_basic_company_and_domain")
@@ -48,14 +48,15 @@ object CDRRealtimeAnalysis extends Logging{
     val pdsnTable = sc.getConf.get("spark.app.table.pdsnTable", "iot_cdr_data_pdsn")
     val haccgTable = sc.getConf.get("spark.app.table.haccgTable", "iot_cdr_data_haccg")
     val pgwTable = sc.getConf.get("spark.app.table.pgwVPDNTable", "iot_cdr_data_pgw")
-    val alarmHtablePre = sc.getConf.get("spark.app.htable.alarmTablePre", "analyze_summ_tab_")
-    val resultHtablePre = sc.getConf.get("spark.app.htable.resultHtablePre", "analyze_summ_rst_everycycle_")
+    val alarmHtablePre = sc.getConf.get("spark.app.htable.alarmTablePre", "analyze_summ_tab_flow_")
+    val resultHtablePre = sc.getConf.get("spark.app.htable.resultHtablePre", "analyze_summ_rst_flow_")
     val resultDayHtable = sc.getConf.get("spark.app.htable.resultDayHtable", "analyze_summ_rst_everyday")
+    val resultBSHtable = sc.getConf.get("spark.app.htable.resultBSHtable", "analyze_summ_rst_bs")
     val analyzeBPHtable = sc.getConf.get("spark.app.htable.analyzeBPHtable", "analyze_bp_tab")
 
     val vpnToApnMapFile = sc.getConf.get("spark.app.vpnToApnMapFile", "/hadoop/IOT/ANALY_PLATFORM/BasicData/VpdnToApn/vpdntoapn.txt")
 
-    import  sqlContext.implicits._
+    import sqlContext.implicits._
 
     val vpnToApnDF  = sqlContext.read.format("text").load(vpnToApnMapFile).map(x=>x.getString(0).split(",")).map(x=>(x(0),x(1))).toDF("vpdndomain","apn")
     val vpdnAndApnTable = "vpdnAndApnTable"
@@ -101,8 +102,9 @@ object CDRRealtimeAnalysis extends Logging{
     //  curAlarmHtable-当前时刻的预警表,  nextAlarmHtable-下一时刻的预警表,
     val curAlarmHtable = alarmHtablePre + dataTime.substring(0,8)
     val nextAlarmHtable = alarmHtablePre + nextDataTime.substring(0,8)
-    val alarmFamilies = new Array[String](1)
+    val alarmFamilies = new Array[String](2)
     alarmFamilies(0) = "s"
+    alarmFamilies(1) = "e"
     // 创建表, 如果表存在， 自动忽略
     HbaseUtils.createIfNotExists(curAlarmHtable,alarmFamilies)
     HbaseUtils.createIfNotExists(nextAlarmHtable,alarmFamilies)
@@ -126,6 +128,10 @@ object CDRRealtimeAnalysis extends Logging{
     analyzeBPFamilies(0) = "bp"
     HbaseUtils.createIfNotExists(analyzeBPHtable, analyzeBPFamilies)
 
+    // resultBSHtable
+    val bsFamilies = new Array[String](1)
+    bsFamilies(0) = "r"
+    HbaseUtils.createIfNotExists(resultBSHtable, bsFamilies)
 
     ////////////////////////////////////////////////////////////////
     //   cache table
@@ -133,9 +139,8 @@ object CDRRealtimeAnalysis extends Logging{
     val userInfoTableCached = "userInfoTableCached"
     sqlContext.sql(s"cache table ${userInfoTableCached} as select mdn, imsicdma, companycode, vpdndomain, isvpdn, isdirect from $userInfoTable where d=$userTableDataDayid")
 
-    val userAndDomainTableCached = "userAndDomainTableCached"
-    sqlContext.sql(s"cache table ${userAndDomainTableCached} as select mdn, companycode, isvpdn, vpdndomain, apn, isdirect from $userAndDomainTable where d=$userTableDataDayid")
-
+    //val userAndDomainTableCached = "userAndDomainTableCached"
+    //sqlContext.sql(s"cache table ${userAndDomainTableCached} as select mdn, companycode, isvpdn, vpdndomain, apn, isdirect from $userAndDomainTable where d=$userTableDataDayid")
 
 
     // 关联3g的mdn, domain,  基站
@@ -165,10 +170,10 @@ object CDRRealtimeAnalysis extends Logging{
          |select u.companycode, '4g' type, u.mdn,
          |(case when u.isdirect='1' then 'D' when u.isvpdn=1 and array_contains(split(u.vpdndomain,','), d.vpdndomain) then 'C' else 'P' end) as servtype,
          |(case when u.isdirect!='1' and array_contains(split(u.vpdndomain,','), d.vpdndomain) then d.vpdndomain else '-1' end)  as vpdndomain,
-         |"-1" bsid, downflow, upflow
+         |u.bsid, downflow, upflow
          |from
          |(
-         |    select p.mdn,p.accesspointnameni as apn, t.companycode, t.vpdndomain, t.isdirect, t.isvpdn,
+         |    select p.mdn,p.accesspointnameni as apn, t.companycode, t.vpdndomain, t.isdirect, t.isvpdn,p.bsid,
          |           nvl(l_datavolumefbcdownlink,0) as downflow, nvl(l_datavolumefbcuplink,0) as upflow
          |    from ${pgwTable} p, ${userInfoTableCached} t
          |    where p.mdn = t.mdn and p.d = '${partitionD}'  and p.h = '${partitionH}' and p.m5='${partitionM5}'
@@ -207,7 +212,7 @@ object CDRRealtimeAnalysis extends Logging{
        """.stripMargin
 
     // 对域名为-1的记录做过滤
-    val statDF = sqlContext.sql(statSQL).filter("vpdndomain is null or vpdndomain!='-1'").coalesce(1)
+    val statDF = sqlContext.sql(statSQL).filter("vpdndomain is null or vpdndomain!='-1'")
 
     /*
     statDF.filter("companycode='P100002368'").show
@@ -230,7 +235,7 @@ object CDRRealtimeAnalysis extends Logging{
       */
 
 
-    val resultRDD = statDF.rdd.map(x=>{
+    val resultRDD = statDF.repartition(13).rdd.map(x=>{
       val companyCode = if(null == x(0)) "-1" else x(0).toString
       val servType = if(null == x(1)) "-1" else x(1).toString
       val servFlag = if(servType == "D") "D" else if(servType == "C") "C"  else if(servType == "P") "P"  else "-1"
@@ -300,8 +305,35 @@ object CDRRealtimeAnalysis extends Logging{
     HbaseDataUtil.saveRddToHbase(resultDayHtable, resultRDD.map(x=>x._5))
 
 
+    val bsStatSQL =
+      s"""
+         |select companycode, servtype, vpdndomain, type, bsid,
+         |       sum(upflow) as upflow,
+         |       sum(downflow) as downflow,
+         |       GROUPING__ID
+         |from ${mdnTable}  m
+         |group by companycode, servtype, vpdndomain, type, bsid
+         |GROUPING SETS ((companycode, type, bsid),(companycode, servtype, type, bsid),(companycode, servtype, vpdndomain, type, bsid))
+       """.stripMargin
 
+    val bsResultDF = sqlContext.sql(bsStatSQL).filter("vpdndomain is null or vpdndomain!='-1'").coalesce(10)
 
+    val bsResultRDD = bsResultDF.rdd.map(x=>{
+      val c = if( null == x(0)) "-1" else x(0).toString // companycode
+      val s = if(null == x(1)) "-1" else x(1).toString // servicetype
+      val v = if(null == x(2)) "-1" else x(2).toString // vpdndomain
+      val n = if(null == x(3)) "0" else x(3).toString //net
+      val bid = if(null == x(4)) "0" else x(4).toString //enbid
+      val uflow = if(null == x(5)) "0" else  x(5).toString // upflow
+      val dflow = if(null == x(6)) "0" else   x(6).toString // downflow
+
+      val rkey = dataTime + "_" + n + "_" + c + "_" + s + "_" + v + "_" + bid
+      val put = new Put(Bytes.toBytes(rkey))
+      put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_u"), Bytes.toBytes(uflow))
+      put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_d"), Bytes.toBytes(dflow))
+      (new ImmutableBytesWritable, put)
+    })
+    HbaseDataUtil.saveRddToHbase(resultBSHtable, bsResultRDD)
 
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -309,10 +341,10 @@ object CDRRealtimeAnalysis extends Logging{
     //  对于每日00:00分的数据需要特殊处理， 在hbase里面00:00分的数据存储的是前一日23:55分至当日00:00分的数据
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
     val preDataTime = DateUtils.timeCalcWithFormatConvertSafe(dataTime, "yyyyMMddHHmm", -5*60, "yyyyMMddHHmm")
-    val curHbaseDF = AuthHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + preDataTime.substring(0, 8))
+    val curHbaseDF = CDRHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + preDataTime.substring(0, 8))
     var resultDF = curHbaseDF.filter("time>='0005'")
     if(preDataTime.substring(0, 8) != dataTime.substring(0, 8)){
-      val nextHbaseDF = AuthHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + dataTime.substring(0, 8))
+      val nextHbaseDF = CDRHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + dataTime.substring(0, 8))
       if(nextHbaseDF!=null){
         resultDF = resultDF.unionAll(nextHbaseDF.filter("time='0000'"))
       }
@@ -324,11 +356,11 @@ object CDRRealtimeAnalysis extends Logging{
       sum("f_c_t_u").as("f_c_t_u"),sum("f_c_t_d").as("f_c_t_d"),
       sum("f_c_3_t").as("f_c_3_t"), sum("f_c_4_t").as("f_c_4_t"), sum("f_c_t_t").as("f_c_t_t"))
 
-    val accumRDD = accumDF.coalesce(1).rdd.map(x=>{
+    val accumRDD = accumDF.repartition(10).rdd.map(x=>{
       val rkey = preDataTime.substring(2, 8) + "_" + x(0).toString
       val dayResPut = new Put(Bytes.toBytes(rkey))
       val f_c_3_u = x(1).toString
-      val f_c_3_d  = x(2).toString
+      val f_c_3_d = x(2).toString
       val f_c_4_u = x(3).toString
       val f_c_4_d = x(4).toString
       val f_c_t_u = x(5).toString
@@ -359,13 +391,13 @@ object CDRRealtimeAnalysis extends Logging{
     //
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
     val hisDataTime = DateUtils.timeCalcWithFormatConvertSafe(dataTime, "yyyyMMddHHmm", -hisDayNum*24*60*60, "yyyyMMddHHmm")
-    val hisDF = AuthHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + hisDataTime.substring(0, 8)).filter("time='" + hisDataTime.substring(8, 12) + "'")
+    val hisDF = CDRHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + hisDataTime.substring(0, 8)).filter("time='" + hisDataTime.substring(8, 12) + "'")
 
     if(hisDF != null){
       val hisResDF = hisDF.select("compnyAndSerAndDomain", "f_c_3_u", "f_c_3_d", "f_c_4_u",
         "f_c_4_d", "f_c_t_u", "f_c_t_d", "f_c_3_t", "f_c_4_t", "f_c_t_t")
 
-     val hisResRDD = hisResDF.rdd.map(x=>{
+     val hisResRDD = hisResDF.repartition(11).rdd.map(x=>{
         val rkey = dataTime.substring(2, 8) + "_" + x(0).toString
         val f_c_3_u = x(1).toString
         val f_c_3_d = x(2).toString
@@ -393,7 +425,7 @@ object CDRRealtimeAnalysis extends Logging{
 
       })
 
-      HbaseDataUtil.saveRddToHbase(resultDayHtable, hisResRDD)
+     // HbaseDataUtil.saveRddToHbase(resultDayHtable, hisResRDD)
     }
 
 
