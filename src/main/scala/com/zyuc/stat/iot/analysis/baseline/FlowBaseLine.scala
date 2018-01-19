@@ -26,7 +26,7 @@ object FlowBaseLine {
     val appName = sc.getConf.get("spark.app.name") // name_2017073111
     val endDayid = sc.getConf.get("spark.app.baseLine.endDayid","20171012") // "20170906"
     val dayM5Time = sc.getConf.get("spark.app.baseLine.dayM5Time","1900")
-    val intervalDayNums = sc.getConf.get("spark.app.baseLine.intervalDayNums","1").toInt //
+    val intervalDayNums = sc.getConf.get("spark.app.baseLine.intervalDayNums","2").toInt //
     val modeName = sc.getConf.get("spark.app.baseLine.modeName","flow") // auth mme flow online
     val alarmHtablePre = sc.getConf.get("spark.app.htable.alarmTablePre", "analyze_summ_tab_")
     val resultHtablePre = sc.getConf.get("spark.app.htable.resultHtablePre", "analyze_summ_rst_")
@@ -66,7 +66,7 @@ object FlowBaseLine {
         println("2")
         hbaseDF = hbaseDF.unionAll(CDRHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + modeName + "_" + dayid).filter(s"time>='${dayM5Time}'"))
       }
-      else if(i>1){
+      else if(i>0){
         hbaseDF = hbaseDF.unionAll(CDRHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + modeName + "_" + dayid))
       }
     }
@@ -91,15 +91,15 @@ object FlowBaseLine {
          |select compnyAndSerAndDomain, time,
          |f_c_3_u, f_c_3_d, f_c_3_t, f_c_4_u,
          |f_c_4_d, f_c_4_t, f_c_t_u, f_c_t_d, f_c_t_t,
-         |row_number() over(partition by compnyAndSerAndDomain, time order by f_c_3_u) f_c_3_u_rn,
-         |row_number() over(partition by compnyAndSerAndDomain, time order by f_c_3_d) f_c_3_d_rn,
-         |row_number() over(partition by compnyAndSerAndDomain, time order by f_c_3_t) f_c_3_t_rn,
-         |row_number() over(partition by compnyAndSerAndDomain, time order by f_c_4_u) f_c_4_u_rn,
-         |row_number() over(partition by compnyAndSerAndDomain, time order by f_c_4_d) f_c_4_d_rn,
-         |row_number() over(partition by compnyAndSerAndDomain, time order by f_c_4_t) f_c_4_t_rn,
-         |row_number() over(partition by compnyAndSerAndDomain, time order by f_c_t_u) f_c_t_u_rn,
-         |row_number() over(partition by compnyAndSerAndDomain, time order by f_c_t_d) f_c_t_d_rn,
-         |row_number() over(partition by compnyAndSerAndDomain, time order by f_c_t_t) f_c_t_t_rn
+         |row_number() over(partition by compnyAndSerAndDomain, time order by cast(f_c_3_u as double)) f_c_3_u_rn,
+         |row_number() over(partition by compnyAndSerAndDomain, time order by cast(f_c_3_d as double)) f_c_3_d_rn,
+         |row_number() over(partition by compnyAndSerAndDomain, time order by cast(f_c_3_t as double)) f_c_3_t_rn,
+         |row_number() over(partition by compnyAndSerAndDomain, time order by cast(f_c_4_u as double)) f_c_4_u_rn,
+         |row_number() over(partition by compnyAndSerAndDomain, time order by cast(f_c_4_d as double)) f_c_4_d_rn,
+         |row_number() over(partition by compnyAndSerAndDomain, time order by cast(f_c_4_t as double)) f_c_4_t_rn,
+         |row_number() over(partition by compnyAndSerAndDomain, time order by cast(f_c_t_u as double)) f_c_t_u_rn,
+         |row_number() over(partition by compnyAndSerAndDomain, time order by cast(f_c_t_d as double)) f_c_t_d_rn,
+         |row_number() over(partition by compnyAndSerAndDomain, time order by cast(f_c_t_t as double)) f_c_t_t_rn
          |from ${tmpTable}
        """.stripMargin
 

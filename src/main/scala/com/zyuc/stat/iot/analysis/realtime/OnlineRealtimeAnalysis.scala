@@ -20,16 +20,17 @@ object OnlineRealtimeAnalysis extends Logging{
     sqlContext.sql("use " + ConfigProperties.IOT_HIVE_DATABASE)
 
     // 获取参数
-    val appName = sc.getConf.get("spark.app.name","name_201710101600") // name_201708010040
+    val appName = sc.getConf.get("spark.app.name","name_201801181540") // name_201708010040
     val userInfoTable = sc.getConf.get("spark.app.table.userInfoTable", "iot_basic_userinfo") //
     val userAndDomainTable = sc.getConf.get("spark.app.table.userAndDomainTable", "iot_basic_user_and_domain")
     val companyAndDomainTable = sc.getConf.get("spark.app.table.companyAndDomainTable", "iot_basic_company_and_domain")
     val userTableDataDayid = sc.getConf.get("spark.app.table.userTableDataDayid", "20170922")
 
-    val auth3gTable = sc.getConf.get("spark.app.table.3gRadiusTable", "iot_radius_ha")
-    val auth4gTable = sc.getConf.get("spark.app.table.4gRadiusTable", "pgwradius_out")
+    val radiusHaTable = sc.getConf.get("spark.app.table.3gRadiusTable", "iot_radius_ha")
+    val radiusPGWTable = sc.getConf.get("spark.app.table.4gRadiusTable", "iot_radius_pgw")
     val alarmHtablePre = sc.getConf.get("spark.app.htable.alarmTablePre", "analyze_summ_tab_online_")
     val resultHtablePre = sc.getConf.get("spark.app.htable.resultHtablePre", "analyze_summ_rst_online_")
+    val resultBSHtable = sc.getConf.get("spark.app.htable.resultBSHtable", "analyze_summ_rst_bs")
     val resultDayHtable = sc.getConf.get("spark.app.htable.resultDayHtable", "analyze_summ_rst_everyday")
     val analyzeBPHtable = sc.getConf.get("spark.app.htable.analyzeBPHtable", "analyze_bp_tab")
 
@@ -97,6 +98,10 @@ object OnlineRealtimeAnalysis extends Logging{
     analyzeBPFamilies(0) = "bp"
     HbaseUtils.createIfNotExists(analyzeBPHtable, analyzeBPFamilies)
 
+    // resultBSHtable
+    val bsFamilies = new Array[String](1)
+    bsFamilies(0) = "r"
+    HbaseUtils.createIfNotExists(resultBSHtable, bsFamilies)
 
     ////////////////////////////////////////////////////////////////
     //   cache table
@@ -109,19 +114,19 @@ object OnlineRealtimeAnalysis extends Logging{
     sqlContext.sql(
       s"""
          |CACHE TABLE ${radiusTable} as
-         |select t.mdn, t.status, t.type,
+         |select t.mdn, t.bsid, t.status, t.type,
          |       (case when result='f' and length(t.terminatecause)=0 then '-1' else t.terminatecause end) as  terminatecause,
          |       t.result, u.companycode, u.vpdndomain, u.isvpdn, u.isdirect, u.iscommon
          |from
          |(
-         |    select mdn, status, '4g' as type, regexp_replace(terminatecause, ' ', '') as terminatecause,
-         |           (case when terminatecause='UserRequest' then 's' else 'f' end ) as result
-         |    from pgwradius_out
+         |    select mdn, status, bsid, '4g' as type, regexp_replace(terminatecause, ' ', '') as terminatecause,
+         |           (case when status='Stop' and terminatecause='UserRequest' then 's' when status='Stop' then 'f' else ' ' end ) as result
+         |    from ${radiusPGWTable}
          |    where dayid='${partitionD}' and time>='${startTimeStr}'  and time<'${endTimeStr}'
          |    union all
-         |    select mdn, status, '3g' as type, terminatecause,
-         |          (case when terminatecause in('2','7','8','9','11','12','13','14','15') then 's' else 'f' end ) as result
-         |    from iot_radius_ha
+         |    select mdn, status, bsid, '3g' as type, terminatecause,
+         |          (case when status='Stop' and terminatecause in('2','7','8','9','11','12','13','14','15') then 's' when status='Stop' then 'f' else ' ' end) as result
+         |    from ${radiusHaTable}
          |    where dayid='${partitionD}' and time>='${startTimeStr}'  and time<'${endTimeStr}'
          |) t, ${userInfoTableCached} u
          |where t.mdn = u.mdn
@@ -255,6 +260,66 @@ object OnlineRealtimeAnalysis extends Logging{
     HbaseDataUtil.saveRddToHbase(nextResultHtable, resultRDD.map(x=>x._4))
     HbaseDataUtil.saveRddToHbase(resultDayHtable, resultRDD.map(x=>x._5))
 
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //   基站数据写入
+    //
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    val bsSQL =
+      s"""
+         |select companycode, 'C' as servtype, null as vpdndomain, type, bsid,
+         |       count(*) cnt,
+         |       sum(case when result='f' then 1 else 0 end) fcnt
+         |from ${radiusTable} c
+         |where isvpdn='1' and status='Stop'
+         |group by companycode, type, bsid
+         |union all
+         |select companycode, 'C' as servtype, vpdndomain, type, bsid,
+         |       count(*) cnt,
+         |       sum(case when result='f' then 1 else 0 end) fcnt
+         |from
+         |(   select companycode, cvpdndomain as vpdndomain, type, status, bsid, result from
+         |    (
+         |        select companycode, vpdndomain, type, status, bsid, result
+         |        from ${radiusTable} c
+         |        where isvpdn='1' and status='Stop'
+         |    ) m lateral view explode(split(m.vpdndomain,',')) c as cvpdndomain
+         |) t
+         |group by companycode, vpdndomain, type, bsid
+         |union all
+         |select companycode, servtype, null as vpdndomain, type, bsid,
+         |       count(*) cnt,
+         |       sum(case when result='f' then 1 else 0 end) fcnt
+         |from
+         |    (
+         |        select companycode,
+         |               (case when isdirect='1' then 'D' when iscommon='1' then 'P' else '-1' end) as servtype,
+         |               type, bsid, status, result
+         |        from ${radiusTable} c where status='Stop'
+         |     ) m
+         |group by companycode, servtype, type, bsid
+         |GROUPING SETS((companycode, type, bsid), (companycode, servtype, type, bsid))
+       """.stripMargin
+
+    val bsResultDF = sqlContext.sql(bsSQL).filter("servtype is null or servtype!='-1'").coalesce(10)
+
+    val bsResultRDD = bsResultDF.rdd.map(x=>{
+      val c = if( null == x(0)) "-1" else x(0).toString // companycode
+      val s = if(null == x(1)) "-1" else x(1).toString // servicetype
+      val v = if(null == x(2)) "-1" else x(2).toString // vpdndomain
+      val n = if(null == x(3)) "0" else x(3).toString //net
+      val bid = if(null == x(4)) "0" else x(4).toString //enbid为空的置为0
+      val locnt = x(5).toString // logoutcnt
+      val flocnt = x(6).toString // failed logoutcnt
+
+      val rkey = dataTime + "_" + n + "_" + c + "_" + s + "_" + v + "_" + bid
+      val put = new Put(Bytes.toBytes(rkey))
+      put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_ln"), Bytes.toBytes(locnt))
+      put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_fln"), Bytes.toBytes(flocnt))
+      (new ImmutableBytesWritable, put)
+    })
+    HbaseDataUtil.saveRddToHbase(resultBSHtable, bsResultRDD)
 
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////

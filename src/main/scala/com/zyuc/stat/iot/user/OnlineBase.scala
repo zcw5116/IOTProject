@@ -159,7 +159,7 @@ object OnlineBase extends Logging{
     ///////////////////////////////////////////////////////////////////////////////////////
     val pdsnOnlineMDNTmp =
       s"""
-         |select  r.mdn, r.bsid, r.event_time,
+         |select  r.mdn, r.bsid, r.event_time
          |from
          |(
          |    select t1.mdn, t2.mdn as mdn2, t1.bsid, t1.event_time from
@@ -307,7 +307,7 @@ object OnlineBase extends Logging{
 
     ///////////////////////////////////////////////////////////////////////////////////////
     //   根据业务统计在线用户数
-    //
+    // create 'iot_dynamic_data','onlinebase','basic'
     ///////////////////////////////////////////////////////////////////////////////////////
 
     // vpdn汇总/vpdn按照域名汇总
@@ -351,7 +351,6 @@ object OnlineBase extends Logging{
          |group by companycode, vpdndomain, type
          |GROUPING SETS((companycode, vpdndomain), (companycode, vpdndomain, type))
        """.stripMargin
-
 
     // 普通企业/定向
     val haccgAndPgwMDN =

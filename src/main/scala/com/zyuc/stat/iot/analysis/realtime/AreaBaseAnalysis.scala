@@ -84,21 +84,23 @@ object AreaBaseAnalysis extends Logging {
          |       nvl(b.provcode, '0') provid, nvl(b.provname, '0') provname,
          |       nvl(b.citycode, '0') cityid, nvl(b.cityname, '0') cityname,
          |       nvl(h.enbid, '0') enbid,
-         |       nvl(concat_ws('_', h.enbid, b.cityname), '0')  enbname,
+         |       nvl(concat_ws('_', h.enbid, b.cityname), nvl(h.enbid, '0'))  enbname,
          |       h.ma_sn, h.ma_rn,
          |       h.a_sn, h.a_rn,
-         |       h.f_d, h.f_u
+         |       h.f_d, h.f_u,
+         |       h.o_ln, h.o_fln
          |from ${tmpHtable} h left join ${bs3gTable} b on(substr(h.enbid, 1, 4) = b.bsidpre)
          |where h.nettype='3g'
          |union all
          |select h.cAndSAndD, '4g' nettype,
          |       nvl(b.provid, '0') provid, nvl(b.provname, '0') provname,
          |       nvl(b.cityid, '0') cityid, nvl(b.cityname, '0') cityname,
-         |       nvl(b.enbid, '0') enbid,
-         |       nvl(b.zhlabel,'0') enbname,
+         |       nvl(h.enbid, '0') enbid,
+         |       nvl(b.zhlabel,nvl(h.enbid, '0')) enbname,
          |       h.ma_sn, h.ma_rn,
          |       h.a_sn, h.a_rn,
-         |       h.f_d, h.f_u
+         |       h.f_d, h.f_u,
+         |       h.o_ln, h.o_fln
          |from   ${tmpHtable} h left join ${bs4gTable} b on(h.enbid = b.enbid)
          |where  h.nettype='4g'
        """.stripMargin
@@ -111,7 +113,8 @@ object AreaBaseAnalysis extends Logging {
          |    select cAndSAndD, provid, provname, cityid, cityname, enbid, enbname, nettype,
          |           sum(ma_sn) ma_sn, sum(ma_rn) ma_rn,
          |           sum(a_sn) a_sn, sum(a_rn) a_rn,
-         |           sum(f_d) f_d, sum(f_u) f_u, (sum(f_d) + sum(f_u)) f_t
+         |           sum(f_d) f_d, sum(f_u) f_u, (sum(f_d) + sum(f_u)) f_t,
+         |           sum(o_ln) o_ln, sum(o_fln) o_fln
          |    from ${bsTable}
          |    group by cAndSAndD, provid, provname, cityid, cityname, enbid, enbname, nettype
          """.stripMargin
@@ -121,7 +124,7 @@ object AreaBaseAnalysis extends Logging {
 
     val resultDF = sqlContext.sql(
       s"""
-         |select cAndSAndD, provid, provname, cityid, cityname, enbid, enbname, nettype, ma_sn, ma_rn, a_sn, a_rn, f_d, f_u, f_t
+         |select cAndSAndD, provid, provname, cityid, cityname, enbid, enbname, nettype, ma_sn, ma_rn, a_sn, a_rn, f_d, f_u, f_t, o_ln, o_fln
          |from ${bsNetTmpTable}
        """.stripMargin)
 
@@ -142,6 +145,8 @@ object AreaBaseAnalysis extends Logging {
           val f_d = x(12).toString
           val f_u = x(13).toString
           val f_t = x(14).toString
+          val o_ln = x(15).toString
+          val o_fln = x(16).toString
 
           val rowkey = dataTime + "_" + nettype + "_" + cAndSAndD + "_" + enbid
           val put = new Put(Bytes.toBytes(rowkey))
@@ -157,6 +162,8 @@ object AreaBaseAnalysis extends Logging {
           put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_d"), Bytes.toBytes(f_d))
           put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_u"), Bytes.toBytes(f_u))
           put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_t"), Bytes.toBytes(f_t))
+          put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_ln"), Bytes.toBytes(o_ln))
+          put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_fln"), Bytes.toBytes(o_fln))
           (new ImmutableBytesWritable, put)
     })
 

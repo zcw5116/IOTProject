@@ -155,7 +155,20 @@ object UserDataETL {
     val DomainAndCompanyDF = tmpDomainAndCompanyDF.join(provinceMapcodeDF,
       tmpDomainAndCompanyDF.col("belo_prov")===provinceMapcodeDF.col("provincecode")).
     select("companycode", "vpdndomain","provincecode","provincename")
-    DomainAndCompanyDF.coalesce(1).write.format("orc").mode(SaveMode.Overwrite).save(companyAndDomainOutputPath)
+
+    val domainAndCompanyTable = "domainAndCompanyTable_" + dataDayid
+    DomainAndCompanyDF.registerTempTable(domainAndCompanyTable)
+
+    sqlContext.sql(
+      s"""select provincecode,provincename,companycode,vpdndomain
+         |from
+         |(
+         |    select provincecode,provincename,companycode,vpdndomain,
+         |           row_number() over(partition by companycode order by provincecode desc) as rn
+         |    from ${domainAndCompanyTable}
+         |) where rn = 1
+       """.stripMargin).coalesce(1).write.format("orc").mode(SaveMode.Overwrite).save(companyAndDomainOutputPath)
+
     sqlContext.sql(s"alter table $companyAndDomainTable add if not exists partition(d='$dataDayid') ")
 
     sc.stop()

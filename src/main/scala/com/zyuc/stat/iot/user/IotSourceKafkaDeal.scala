@@ -18,7 +18,9 @@ import scala.util.parsing.json.JSON
  * desc:数据匹配case class
  */
 case class pgwradius_out(APN: String, Duration: String, IPAddr: String, MDN: String,
-                         InputOctets: String, OutputOctets: String, NetType: String, SessionID: String,
+                         InputOctets: String, OutputOctets: String,
+                         AccProvince: String, BSID: String, RatType: String, SGSNAddress: String,
+                         NetType: String, SessionID: String,
                          Time: String, Status: String, TerminateCause: String, dayid: String)
 
 /**
@@ -37,7 +39,7 @@ object IotSourceKafkaDeal extends GetProperties {
     // 创建StreamingContext
     // 创建上下文
     val sparkConf = new SparkConf()
-      .setAppName("IotSourceKafkaDeal")
+      //.setAppName("IotSourceKafkaDeal")
 
     val sc = new SparkContext(sparkConf)
 
@@ -49,7 +51,7 @@ object IotSourceKafkaDeal extends GetProperties {
     // 配置信息
     val kafkaParams = Map[String, String]("metadata.broker.list" -> prop.getProperty("kafka.metadata.broker.list"))
     // 获取topic和partition参数
-    val groupName = "IotSourceKafkaDeal1"
+    val groupName = "pgwradius"
     // 获取kafkaStream
     val kafkaStream = SparkKafkaUtils.createDirectKafkaStream(ssc, kafkaParams, zkClient, topics, groupName)
 
@@ -83,6 +85,8 @@ object IotSourceKafkaDeal extends GetProperties {
                 pgwradius_out(getMapData(map, "APN"), getMapData(map, "Duration"),
                   getMapData(map, "IPAddr"), getMapData(map, "MDN"),
                   getMapData(map, "InputOctets"), getMapData(map, "OutputOctets"),
+                  getMapData(map, "AccProvince"), getMapData(map, "BSID"),
+                  getMapData(map, "RatType"), getMapData(map, "SGSNAddress"),
                   getMapData(map, "NetType"), getMapData(map, "SessionID"),
                   Time,
                   getMapData(map, "Status"), getMapData(map, "TerminateCause"),
@@ -98,7 +102,7 @@ object IotSourceKafkaDeal extends GetProperties {
           .toDF()
           .registerTempTable("registerTempTable_pgwradius_out")
 
-        hiveContext.sql("insert into iot.pgwradius_out partition(dayid) " +
+        hiveContext.sql("insert into iot.iot_radius_pgw partition(dayid) " +
           "select " +
           " APN, " +
           " Duration, " +
@@ -106,6 +110,10 @@ object IotSourceKafkaDeal extends GetProperties {
           " MDN, " +
           " InputOctets, " +
           " OutputOctets, " +
+          " AccProvince, " +
+          " BSID, " +
+          " RatType, " +
+          " SGSNAddress, " +
           " NetType, " +
           " SessionID, " +
           " Time, " +
