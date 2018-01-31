@@ -28,9 +28,14 @@ object AreaHtableConverter extends Logging {
     StructField("enbid", StringType),
     StructField("ma_sn", StringType),
     StructField("ma_rn", StringType),
-    StructField("a_sn", StringType),
-
     StructField("a_rn", StringType),
+
+    StructField("a_fn", StringType),
+    StructField("a_sn", StringType),
+    StructField("a_rcn", StringType),
+    StructField("a_fcn", StringType),
+    StructField("a_scn", StringType),
+
     StructField("f_d", StringType),
     StructField("f_u", StringType),
     StructField("o_ln", StringType),
@@ -55,8 +60,14 @@ object AreaHtableConverter extends Logging {
 
       val ma_sn = Bytes.toString(row._2.getValue(Bytes.toBytes("r"), Bytes.toBytes("ma_sn")))
       val ma_rn = Bytes.toString(row._2.getValue(Bytes.toBytes("r"), Bytes.toBytes("ma_rn")))
-      val a_sn = Bytes.toString(row._2.getValue(Bytes.toBytes("r"), Bytes.toBytes("a_sn")))
+
       val a_rn = Bytes.toString(row._2.getValue(Bytes.toBytes("r"), Bytes.toBytes("a_rn")))
+      val a_fn = Bytes.toString(row._2.getValue(Bytes.toBytes("r"), Bytes.toBytes("a_fn")))
+      val a_sn = Bytes.toString(row._2.getValue(Bytes.toBytes("r"), Bytes.toBytes("a_sn")))
+      val a_rcn = Bytes.toString(row._2.getValue(Bytes.toBytes("r"), Bytes.toBytes("a_rcn")))
+      val a_fcn = Bytes.toString(row._2.getValue(Bytes.toBytes("r"), Bytes.toBytes("a_fcn")))
+      val a_scn = Bytes.toString(row._2.getValue(Bytes.toBytes("r"), Bytes.toBytes("a_scn")))
+
       val f_u = Bytes.toString(row._2.getValue(Bytes.toBytes("r"), Bytes.toBytes("f_u")))
       val f_d = Bytes.toString(row._2.getValue(Bytes.toBytes("r"), Bytes.toBytes("f_d")))
 
@@ -80,9 +91,15 @@ object AreaHtableConverter extends Logging {
         enbid,
         if(null==ma_sn) "0" else ma_sn,
         if(null==ma_rn) "0" else ma_rn,
-        if(null==a_sn) "0" else a_sn,
-
         if(null==a_rn) "0" else a_rn,
+
+        if(null==a_fn) "0" else a_fn,
+        if(null==a_sn) "0" else a_sn,
+        if(null==a_rcn) "0" else a_rcn,
+        if(null==a_fcn) "0" else a_fcn,
+        if(null==a_scn) "0" else a_scn,
+
+
         if(null==f_u) "0" else f_u,
         if(null==f_d) "0" else f_d,
 

@@ -6,6 +6,7 @@ import com.zyuc.stat.utils.{DateUtils, HbaseUtils}
 import org.apache.hadoop.hbase.client.Put
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable
 import org.apache.hadoop.hbase.util.Bytes
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{Logging, SparkConf, SparkContext}
 
@@ -76,19 +77,19 @@ object AreaRealTimeAnalysis extends Logging {
              |    select  h.cAndSAndD, '3g' nettype, nvl(b.provcode, '0') provid, nvl(b.provname, '0') provname,
              |            nvl(b.citycode, '0') cityid, nvl(b.cityname, '0') cityname,
              |            nvl(h.enbid, '0') enbid, nvl(concat_ws('_', h.enbid, b.cityname), h.enbid)  enbname,
-             |            h.ma_sn, h.ma_rn, h.a_sn, h.a_rn, h.f_d, h.f_u, (h.f_d + h.f_u) f_t, h.o_ln, h.o_fln
+             |            h.ma_sn, h.ma_rn, h.a_sn, h.a_rn, h.a_fn, h.a_fcn, h.f_d, h.f_u, (h.f_d + h.f_u) f_t, h.o_ln, h.o_fln
              |    from    ${tmpCurHtable} h left join ${bs3gTable} b on(substr(h.enbid, 1, 4) = b.bsidpre)
              |    where   h.nettype='3g'
              |    union all
              |    select  h.cAndSAndD, '4g' nettype, nvl(b.provid, '0') provid, nvl(b.provname, '0') provname,
              |            nvl(b.cityid, '0') cityid, nvl(b.cityname, '0') cityname,
              |            nvl(b.enbid, h.enbid) enbid, nvl(b.zhlabel,h.enbid) enbname,
-             |            h.ma_sn, h.ma_rn, h.a_sn, h.a_rn, h.f_d, h.f_u, (h.f_d + h.f_u) f_t, h.o_ln, h.o_fln
+             |            h.ma_sn, h.ma_rn, h.a_sn, h.a_rn, h.a_fn, h.a_fcn, h.f_d, h.f_u, (h.f_d + h.f_u) f_t, h.o_ln, h.o_fln
              |    from    ${tmpCurHtable} h left join ${bs4gTable} b on(h.enbid = b.enbid)
              |    where  h.nettype='4g'
              |    union all
              |    select  cAndSAndD, nettype, provid, provname, cityid, cityname, enbid, enbname,
-             |            ma_sn, ma_rn, a_sn, a_rn, f_d, f_u,  (f_d + f_u) f_t, o_ln, o_fln
+             |            ma_sn, ma_rn, a_sn, a_rn, (a_rn - a_sn) as a_fn, 0 as a_fcn, f_d, f_u,  (f_d + f_u) f_t, o_ln, o_fln
              |    from    ${baseTmpTable}
              |) t
              |group by cAndSAndD, nettype, provid, provname, cityid, cityname, enbid, enbname
@@ -112,21 +113,53 @@ object AreaRealTimeAnalysis extends Logging {
              |    select  h.cAndSAndD, '3g' nettype, nvl(b.provcode, '0') provid, nvl(b.provname, '0') provname,
              |            nvl(b.citycode, '0') cityid, nvl(b.cityname, '0') cityname,
              |            nvl(h.enbid, '0') enbid, nvl(concat_ws('_', h.enbid, b.cityname), '0')  enbname,
-             |            h.ma_sn, h.ma_rn, h.a_sn, h.a_rn, h.f_d, h.f_u, (h.f_d + h.f_u) f_t, h.o_ln, h.o_fln
+             |            h.ma_sn, h.ma_rn, h.a_sn, h.a_rn, h.a_fn, h.a_fcn, h.f_d, h.f_u, (h.f_d + h.f_u) f_t, h.o_ln, h.o_fln
              |    from    ${tmpCurHtable} h left join ${bs3gTable} b on(substr(h.enbid, 1, 4) = b.bsidpre)
              |    where   h.nettype='3g'
              |    union all
              |    select  h.cAndSAndD, '4g' nettype, nvl(b.provid, '0') provid, nvl(b.provname, '0') provname,
              |            nvl(b.cityid, '0') cityid, nvl(b.cityname, '0') cityname,
              |            h.enbid, nvl(b.zhlabel,'0') enbname,
-             |            h.ma_sn, h.ma_rn, h.a_sn, h.a_rn, h.f_d, h.f_u, (h.f_d + h.f_u) f_t, h.o_ln, h.o_fln
+             |            h.ma_sn, h.ma_rn, h.a_sn, h.a_rn, h.a_fn, h.a_fcn, h.f_d, h.f_u, (h.f_d + h.f_u) f_t, h.o_ln, h.o_fln
              |    from    ${tmpCurHtable} h left join ${bs4gTable} b on(h.enbid = b.enbid)
              |    where  h.nettype='4g'
              |) t
              |group by cAndSAndD, nettype, provid, provname, cityid, cityname, enbid, enbname
        """.stripMargin
       }
+      else if (analyType == "m5") {
+        // datatime 5分钟前的rowkey范围
+        val hCurRowStart = DateUtils.timeCalcWithFormatConvertSafe(dataTime, "yyyyMMddHHmm", -5 * 60, "yyyyMMddHHmm")
+        val hCurRowEnd = DateUtils.timeCalcWithFormatConvertSafe(dataTime, "yyyyMMddHHmm", 5 * 60, "yyyyMMddHHmm")
+        val hbaseCurDF = AreaHtableConverter.convertToDF(sc, sqlContext, resultBSHtable, (hCurRowStart, hCurRowEnd))
+        val tmpCurHtable = "tmpCurHtable_" + dataTime
+        hbaseCurDF.registerTempTable(tmpCurHtable)
 
+        bsSQL =
+          s"""
+             |cache table ${bsTable} as
+             |select cAndSAndD, nettype, provid, provname, cityid, cityname, enbid, enbname,
+             |       sum(ma_sn) as ma_sn, sum(ma_rn) as ma_rn, sum(a_sn) as a_sn, sum(a_rn) as a_rn,
+             |       sum(f_d) as f_d, sum(f_u) as f_u, sum(f_t) as f_t, sum(o_ln) as o_ln, sum(o_fln) as o_fln
+             |from
+             |(
+             |    select  h.cAndSAndD, '3g' nettype, nvl(b.provcode, '0') provid, nvl(b.provname, '0') provname,
+             |            nvl(b.citycode, '0') cityid, nvl(b.cityname, '0') cityname,
+             |            nvl(h.enbid, '0') enbid, nvl(concat_ws('_', h.enbid, b.cityname), '0')  enbname,
+             |            h.ma_sn, h.ma_rn, h.a_sn, h.a_rn, h.a_fn, h.a_fcn, h.f_d, h.f_u, (h.f_d + h.f_u) f_t, h.o_ln, h.o_fln
+             |    from    ${tmpCurHtable} h left join ${bs3gTable} b on(substr(h.enbid, 1, 4) = b.bsidpre)
+             |    where   h.nettype='3g'
+             |    union all
+             |    select  h.cAndSAndD, '4g' nettype, nvl(b.provid, '0') provid, nvl(b.provname, '0') provname,
+             |            nvl(b.cityid, '0') cityid, nvl(b.cityname, '0') cityname,
+             |            h.enbid, nvl(b.zhlabel,'0') enbname,
+             |            h.ma_sn, h.ma_rn, h.a_sn, h.a_rn, h.a_fn, h.a_fcn, h.f_d, h.f_u, (h.f_d + h.f_u) f_t, h.o_ln, h.o_fln
+             |    from    ${tmpCurHtable} h left join ${bs4gTable} b on(h.enbid = b.enbid)
+             |    where  h.nettype='4g'
+             |) t
+             |group by cAndSAndD, nettype, provid, provname, cityid, cityname, enbid, enbname
+       """.stripMargin
+      }
 
       sqlContext.sql(bsSQL)
 
@@ -140,7 +173,7 @@ object AreaRealTimeAnalysis extends Logging {
            |       row_number() over(partition by cAndSAndD, nettype order by ma_rn desc ) ma_net_rank,
            |       row_number() over(partition by cAndSAndD, nettype order by a_rn desc ) a_net_rank,
            |       row_number() over(partition by cAndSAndD, nettype order by f_t desc ) f_net_rank,
-           |       row_number() over(partition by cAndSAndD order by f_t desc ) f_total_rank,
+           |       row_number() over(partition by cAndSAndD  order by f_t desc ) f_total_rank,
            |       row_number() over(partition by cAndSAndD, nettype order by o_fln desc ) o_net_rank
            |from ${bsTable} t
          """.stripMargin
@@ -184,53 +217,66 @@ object AreaRealTimeAnalysis extends Logging {
         val fTotalPut = if (fTotalRank.toDouble < 1000) new Put(Bytes.toBytes(fRow)) else null
         val oTotalPut = if (oTotalRank.toDouble < 1000) new Put(Bytes.toBytes(oRow)) else null
 
-        if (maNetPut != null) {
+        var maTuple:Tuple2[ImmutableBytesWritable, Put] = null
+        var authTuple:Tuple2[ImmutableBytesWritable, Put] = null
+        var fNetTuple:Tuple2[ImmutableBytesWritable, Put] = null
+        var ftTuple:Tuple2[ImmutableBytesWritable, Put] = null
+        var onlineTuple:Tuple2[ImmutableBytesWritable, Put] = null
+
+        if (maNetPut !=null && marn >= "1") {
           maNetPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_t_rn_bd"), Bytes.toBytes(bid))
           maNetPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_t_rn_bn"), Bytes.toBytes(bname))
           maNetPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_t_rn_bv"), Bytes.toBytes(marn))
           maNetPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_t_rat_bd"), Bytes.toBytes(bid))
           maNetPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_t_rat_bn"), Bytes.toBytes(bname))
           maNetPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_t_rat_bv"), Bytes.toBytes(marat))
-
-
+          maTuple = (new ImmutableBytesWritable, maNetPut)
         }
 
-        if (aNetPut != null) {
+        if (aNetPut != null &&  arn >= "1") {
           aNetPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_t_rn_bd"), Bytes.toBytes(bid))
           aNetPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_t_rn_bn"), Bytes.toBytes(bname))
           aNetPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_t_rn_bv"), Bytes.toBytes(arn))
           aNetPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_t_rat_bd"), Bytes.toBytes(bid))
           aNetPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_t_rat_bn"), Bytes.toBytes(bname))
           aNetPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_t_rat_bv"), Bytes.toBytes(arat))
+          authTuple = (new ImmutableBytesWritable, aNetPut)
         }
 
-        if (fNetPut != null) {
+        if (fNetPut != null &&  ft >= "1") {
           fNetPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_" + netFlag + "_t_bd"), Bytes.toBytes(bid))
           fNetPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_" + netFlag + "_t_bn"), Bytes.toBytes(bname))
           fNetPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_" + netFlag + "_t_bv"), Bytes.toBytes(ft))
+          fNetTuple = (new ImmutableBytesWritable, fNetPut)
         }
 
         if (fTotalPut != null) {
           fTotalPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_t_t_bd"), Bytes.toBytes(bid))
           fTotalPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_t_t_bn"), Bytes.toBytes(bname))
           fTotalPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_t_t_bv"), Bytes.toBytes(ft))
+          ftTuple = (new ImmutableBytesWritable, fTotalPut)
         }
 
-        if (oTotalPut != null) {
+        if (oTotalPut != null && ofln >= "1") {
           oTotalPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_" + analyType + "_t_ablo_bd"), Bytes.toBytes(bid))
-          oTotalPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_" + analyType + "_t_ablo_bd"), Bytes.toBytes(bname))
+          oTotalPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_" + analyType + "_t_ablo_bn"), Bytes.toBytes(bname))
           oTotalPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_" + analyType + "_t_ablo_bv"), Bytes.toBytes(ofln))
+          onlineTuple = (new ImmutableBytesWritable, oTotalPut)
         }
 
-        ((new ImmutableBytesWritable, maNetPut), (new ImmutableBytesWritable, aNetPut), (new ImmutableBytesWritable, fNetPut), (new ImmutableBytesWritable, fTotalPut), (new ImmutableBytesWritable, oTotalPut))
+        (maTuple, authTuple, fNetTuple, ftTuple, onlineTuple)
 
       })
 
-      HbaseDataUtil.saveRddToHbase(areaRankHtable, bsNetStatRDD.map(_._1).filter(null != _._2))
-      HbaseDataUtil.saveRddToHbase(areaRankHtable, bsNetStatRDD.map(_._2).filter(null != _._2))
-      HbaseDataUtil.saveRddToHbase(areaRankHtable, bsNetStatRDD.map(_._3).filter(null != _._2))
-      HbaseDataUtil.saveRddToHbase(areaRankHtable, bsNetStatRDD.map(_._4).filter(null != _._2))
-      HbaseDataUtil.saveRddToHbase(areaRankHtable, bsNetStatRDD.map(_._5).filter(null != _._2))
+
+      HbaseDataUtil.saveRddToHbase(areaRankHtable, bsNetStatRDD.filter(null != _._1).map(_._1))
+      //HbaseDataUtil.saveRddToHbase(areaRankHtable, bsNetStatRDD.filter(null != _._2).map(_._2))
+      HbaseDataUtil.saveRddToHbase(areaRankHtable, bsNetStatRDD.filter(null != _._3).map(_._3))
+      HbaseDataUtil.saveRddToHbase(areaRankHtable, bsNetStatRDD.filter(null != _._4).map(_._4))
+      HbaseDataUtil.saveRddToHbase(areaRankHtable, bsNetStatRDD.filter(null != _._5).map(_._5))
+
+
+
 
 
       val cityStatSQL =
@@ -288,7 +334,13 @@ object AreaRealTimeAnalysis extends Logging {
         val fPut = if (fRank.toDouble < 1000) new Put(Bytes.toBytes(fRow)) else null
         val oPut = if (oRank.toDouble < 1000) new Put(Bytes.toBytes(oRow)) else null
 
-        if (maPut != null) {
+
+        var maTuple:Tuple2[ImmutableBytesWritable, Put] = null
+        var authTuple:Tuple2[ImmutableBytesWritable, Put] = null
+        var ftTuple:Tuple2[ImmutableBytesWritable, Put] = null
+        var onlineTuple:Tuple2[ImmutableBytesWritable, Put] = null
+
+        if (maPut != null && marn >= "1") {
           maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rn_rd"), Bytes.toBytes(cname))
           maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rn_rn"), Bytes.toBytes(cname))
           maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rn_rv"), Bytes.toBytes(marn))
@@ -296,39 +348,42 @@ object AreaRealTimeAnalysis extends Logging {
           maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rat_rn"), Bytes.toBytes(cname))
           maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rat_rv"), Bytes.toBytes(marat))
 
-
+          maTuple = (new ImmutableBytesWritable, maPut)
         }
 
-        if (aPut != null) {
+        if (aPut != null &&  arn >= "1") {
           aPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_" + netFlag + "_rn_rd"), Bytes.toBytes(cname))
           aPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_" + netFlag + "_rn_rn"), Bytes.toBytes(cname))
           aPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_" + netFlag + "_rn_rv"), Bytes.toBytes(arn))
           aPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_" + netFlag + "_rat_rd"), Bytes.toBytes(cname))
           aPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_" + netFlag + "_rat_rn"), Bytes.toBytes(cname))
           aPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_" + netFlag + "_rat_rv"), Bytes.toBytes(arat))
+          authTuple = (new ImmutableBytesWritable, aPut)
         }
 
-        if (fPut != null) {
+        if (fPut != null &&  ft >= "1") {
           fPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_" + netFlag + "_t_rd"), Bytes.toBytes(cname))
           fPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_" + netFlag + "_t_rn"), Bytes.toBytes(cname))
           fPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_" + netFlag + "_t_rv"), Bytes.toBytes(ft))
+          ftTuple = (new ImmutableBytesWritable, fPut)
         }
 
 
-        if (oPut != null) {
+        if (oPut != null && ofln >= "1") {
           oPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_" + analyType + "_" + netFlag + "_ablo_rd"), Bytes.toBytes(cname))
           oPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_" + analyType + "_" + netFlag + "_ablo_rn"), Bytes.toBytes(cname))
           oPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_" + analyType + "_" + netFlag + "_ablo_rv"), Bytes.toBytes(ofln))
+          onlineTuple = (new ImmutableBytesWritable, oPut)
         }
 
-        ((new ImmutableBytesWritable, maPut), (new ImmutableBytesWritable, aPut), (new ImmutableBytesWritable, fPut), (new ImmutableBytesWritable, fPut), (new ImmutableBytesWritable, oPut))
+        (maTuple, authTuple, ftTuple, onlineTuple)
 
       })
 
-      HbaseDataUtil.saveRddToHbase(areaRankHtable, cityStatRDD.map(_._1).filter(null != _._2))
-      HbaseDataUtil.saveRddToHbase(areaRankHtable, cityStatRDD.map(_._2).filter(null != _._2))
-      HbaseDataUtil.saveRddToHbase(areaRankHtable, cityStatRDD.map(_._3).filter(null != _._2))
-      HbaseDataUtil.saveRddToHbase(areaRankHtable, cityStatRDD.map(_._4).filter(null != _._2))
+      HbaseDataUtil.saveRddToHbase(areaRankHtable, cityStatRDD.filter(null != _._1).map(_._1))
+      //HbaseDataUtil.saveRddToHbase(areaRankHtable, cityStatRDD.filter(null != _._2).map(_._2))
+      HbaseDataUtil.saveRddToHbase(areaRankHtable, cityStatRDD.filter(null != _._3).map(_._3))
+      HbaseDataUtil.saveRddToHbase(areaRankHtable, cityStatRDD.filter(null != _._4).map(_._4))
 
 
       val proStatSQL =
@@ -340,7 +395,7 @@ object AreaRealTimeAnalysis extends Logging {
            |       row_number() over(partition by cAndSAndD, nettype order by ma_rn desc) ma_rank,
            |       row_number() over(partition by cAndSAndD, nettype order by a_rn desc) a_rank,
            |       row_number() over(partition by cAndSAndD, nettype order by f_t desc) f_rank,
-           |       row_number() over(partition by cAndSAndD, nettype order by o_fln desc) f_rank
+           |       row_number() over(partition by cAndSAndD, nettype order by o_fln desc) o_rank
            |from
            |(
            |    select cAndSAndD, nvl(nettype, 't') nettype, provname,
@@ -387,44 +442,53 @@ object AreaRealTimeAnalysis extends Logging {
         val fPut = if (fRank.toDouble < 1000) new Put(Bytes.toBytes(fRow)) else null
         val oPut = if (oRank.toDouble < 1000) new Put(Bytes.toBytes(oRow)) else null
 
-        if (maPut != null) {
+        var maTuple:Tuple2[ImmutableBytesWritable, Put] = null
+        var authTuple:Tuple2[ImmutableBytesWritable, Put] = null
+        var ftTuple:Tuple2[ImmutableBytesWritable, Put] = null
+        var onlineTuple:Tuple2[ImmutableBytesWritable, Put] = null
+
+        if (maPut != null && marn >= "1") {
           maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rn_pd"), Bytes.toBytes(pname))
           maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rn_pn"), Bytes.toBytes(pname))
           maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rn_pv"), Bytes.toBytes(marn))
           maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rat_rd"), Bytes.toBytes(pname))
           maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rat_rn"), Bytes.toBytes(pname))
           maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rat_rv"), Bytes.toBytes(marat))
+          maTuple = (new ImmutableBytesWritable, maPut)
         }
 
-        if (aPut != null) {
+        if (aPut != null &&  arn >= "1") {
           aPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_" + netFlag + "_rn_pd"), Bytes.toBytes(pname))
           aPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_" + netFlag + "_rn_pn"), Bytes.toBytes(pname))
           aPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_" + netFlag + "_rn_pv"), Bytes.toBytes(arn))
           aPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_" + netFlag + "_rat_pd"), Bytes.toBytes(pname))
           aPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_" + netFlag + "_rat_pn"), Bytes.toBytes(pname))
           aPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_" + netFlag + "_rat_pv"), Bytes.toBytes(arat))
+          authTuple = (new ImmutableBytesWritable, aPut)
         }
 
-        if (fPut != null) {
+        if (fPut != null &&  ft >= "1") {
           fPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_" + netFlag + "_t_pd"), Bytes.toBytes(pname))
           fPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_" + netFlag + "_t_pn"), Bytes.toBytes(pname))
           fPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_" + netFlag + "_t_pv"), Bytes.toBytes(ft))
+          ftTuple = (new ImmutableBytesWritable, fPut)
         }
 
-        if (oPut != null) {
-          oPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_" + analyType + "_" + netFlag + "_ablo_rd"), Bytes.toBytes(pname))
-          oPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_" + analyType + "_" + netFlag + "_ablo_rn"), Bytes.toBytes(pname))
-          oPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_" + analyType + "_" + netFlag + "_ablo_rv"), Bytes.toBytes(ofln))
+        if (oPut != null && ofln >= "1") {
+          oPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_" + analyType + "_" + netFlag + "_ablo_pd"), Bytes.toBytes(pname))
+          oPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_" + analyType + "_" + netFlag + "_ablo_pn"), Bytes.toBytes(pname))
+          oPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_" + analyType + "_" + netFlag + "_ablo_pv"), Bytes.toBytes(ofln))
+          onlineTuple = (new ImmutableBytesWritable, oPut)
         }
 
-        ((new ImmutableBytesWritable, maPut), (new ImmutableBytesWritable, aPut), (new ImmutableBytesWritable, fPut), (new ImmutableBytesWritable, oPut))
+        (maTuple, authTuple, ftTuple, onlineTuple)
 
       })
 
-      HbaseDataUtil.saveRddToHbase(areaRankHtable, proStatRDD.map(_._1).filter(null != _._2))
-      HbaseDataUtil.saveRddToHbase(areaRankHtable, proStatRDD.map(_._2).filter(null != _._2))
-      HbaseDataUtil.saveRddToHbase(areaRankHtable, proStatRDD.map(_._3).filter(null != _._2))
-      HbaseDataUtil.saveRddToHbase(areaRankHtable, proStatRDD.map(_._4).filter(null != _._2))
+      HbaseDataUtil.saveRddToHbase(areaRankHtable, proStatRDD.filter(null != _._1).map(_._1))
+      //HbaseDataUtil.saveRddToHbase(areaRankHtable, proStatRDD.filter(null != _._2).map(_._2))
+      HbaseDataUtil.saveRddToHbase(areaRankHtable, proStatRDD.filter(null != _._3).map(_._3))
+      HbaseDataUtil.saveRddToHbase(areaRankHtable, proStatRDD.filter(null != _._4).map(_._4))
 
 
       // 汇总
@@ -455,6 +519,8 @@ object AreaRealTimeAnalysis extends Logging {
         val fRank = if (null == x(15)) "0" else String.format("%3s", x(15).toString).replaceAll(" ", "0")
         val oRank = if (null == x(16)) "0" else String.format("%3s", x(16).toString).replaceAll(" ", "0")
 
+
+
         val csd = if (null == x(0)) "0" else x(0).toString
         val maRow = csd + "_000"
         val aRow = csd + "_000"
@@ -482,39 +548,55 @@ object AreaRealTimeAnalysis extends Logging {
         val fPut = if (fRank.toDouble < 1000) new Put(Bytes.toBytes(fRow)) else null
         val oPut = if (oRank.toDouble < 1000) new Put(Bytes.toBytes(oRow)) else null
 
-        if (maPut != null) {
+        var maTuple:Tuple2[ImmutableBytesWritable, Put] = null
+        var authTuple:Tuple2[ImmutableBytesWritable, Put] = null
+        var ftTuple:Tuple2[ImmutableBytesWritable, Put] = null
+        var onlineTuple:Tuple2[ImmutableBytesWritable, Put] = null
+
+        if (maPut != null && marn >= "1") {
           maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rn_sv"), Bytes.toBytes(marn))
           maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rat_sv"), Bytes.toBytes(marat))
+
+          maTuple = (new ImmutableBytesWritable, maPut)
         }
 
-        if (aPut != null) {
+        if (aPut != null &&  arn  >= "1") {
           aPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_" + netFlag + "_rn_sv"), Bytes.toBytes(arn))
           aPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_" + netFlag + "_rat_sv"), Bytes.toBytes(arat))
+          authTuple = (new ImmutableBytesWritable, aPut)
         }
 
-        if (fPut != null) {
+        if (fPut != null &&  ft >= "1") {
           fPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_" + netFlag + "_t_sv"), Bytes.toBytes(ft))
+          ftTuple = (new ImmutableBytesWritable, fPut)
         }
 
 
-        if (oPut != null) {
+        if (oPut != null && ofln >= "1") {
           oPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_" + analyType + "_" + netFlag + "_ablo_sv"), Bytes.toBytes(ofln))
+          onlineTuple = (new ImmutableBytesWritable, oPut)
         }
 
-        ((new ImmutableBytesWritable, maPut), (new ImmutableBytesWritable, aPut), (new ImmutableBytesWritable, fPut), (new ImmutableBytesWritable, oPut))
+        (maTuple, authTuple, ftTuple, ftTuple)
 
       })
 
-      HbaseDataUtil.saveRddToHbase(areaRankHtable, proStatRDD.map(_._1).filter(null != _._2))
-      HbaseDataUtil.saveRddToHbase(areaRankHtable, proStatRDD.map(_._2).filter(null != _._2))
-      HbaseDataUtil.saveRddToHbase(areaRankHtable, proStatRDD.map(_._3).filter(null != _._2))
-      HbaseDataUtil.saveRddToHbase(areaRankHtable, proStatRDD.map(_._4).filter(null != _._2))
-
-
+      HbaseDataUtil.saveRddToHbase(areaRankHtable, proStatRDD.filter(null != _._1).map(_._1))
+      //HbaseDataUtil.saveRddToHbase(areaRankHtable, proStatRDD.filter(null != _._2).map(_._2))
+      HbaseDataUtil.saveRddToHbase(areaRankHtable, proStatRDD.filter(null != _._3).map(_._3))
+      HbaseDataUtil.saveRddToHbase(areaRankHtable, proStatRDD.filter(null != _._4).map(_._4))
 
     }
 
+    // auth 5 minutes
+    AuthAreaAnalysis.AuthAreaAnalysis(sc, sqlContext, "m5", dataTime, resultBSHtable, areaRankHtable, bs3gTable, bs4gTable)
+
     areaAnalysis("h")
     areaAnalysis("d")
+
+
+    // 更新时间, 断点时间比数据时间多1分钟
+    val updateTime = DateUtils.timeCalcWithFormatConvertSafe(dataTime, "yyyyMMddHHmm", 1*60, "yyyyMMddHHmm")
+    HbaseUtils.upSertColumnByRowkey(analyzeBPHtable, "bp", "rank_byArea_bptime", "rank_byArea_bptime", updateTime)
   }
 }

@@ -120,12 +120,12 @@ object OnlineRealtimeAnalysis extends Logging{
          |from
          |(
          |    select mdn, status, bsid, '4g' as type, regexp_replace(terminatecause, ' ', '') as terminatecause,
-         |           (case when status='Stop' and terminatecause='UserRequest' then 's' when status='Stop' then 'f' else ' ' end ) as result
+         |           (case when status='Stop' and terminatecause='User-Request' then 's' when status='Stop' then 'f' else ' ' end ) as result
          |    from ${radiusPGWTable}
          |    where dayid='${partitionD}' and time>='${startTimeStr}'  and time<'${endTimeStr}'
          |    union all
          |    select mdn, status, bsid, '3g' as type, terminatecause,
-         |          (case when status='Stop' and terminatecause in('2','7','8','9','11','12','13','14','15') then 's' when status='Stop' then 'f' else ' ' end) as result
+         |          (case when status='Stop' and terminatecause in('1', '2', '3', '7','8','9','11','12','13','14','15') then 's' when status='Stop' then 'f' else ' ' end) as result
          |    from ${radiusHaTable}
          |    where dayid='${partitionD}' and time>='${startTimeStr}'  and time<'${endTimeStr}'
          |) t, ${userInfoTableCached} u

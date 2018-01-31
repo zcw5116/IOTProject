@@ -142,7 +142,7 @@ object OnlineBaseLine {
       val o_b_t_on = x(4).toString
 
       val alramkey0 = "0_" + time + "_" + companyAndDomain
-      val alramkey1 = "0_" + time + "_" + companyAndDomain
+      val alramkey1 = "1_" + time + "_" + companyAndDomain
       val resultkey = companyAndDomain + "_" + time
 
       val putAlarm0 = new Put(Bytes.toBytes(alramkey0))

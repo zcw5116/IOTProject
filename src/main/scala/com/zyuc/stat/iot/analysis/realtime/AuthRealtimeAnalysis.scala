@@ -301,7 +301,7 @@ object AuthRealtimeAnalysis extends Logging{
     //   基站数据
     //
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
-    val bsSQL =
+/*    val bsSQL =
       s"""
          |select companycode, servtype, mdndomain, bsid,
          |       count(*) as rn,
@@ -309,7 +309,31 @@ object AuthRealtimeAnalysis extends Logging{
          |from ${mdnTable}  where type='3g'
          |group by companycode, servtype, mdndomain, bsid
          |grouping sets((companycode, servtype, bsid), (companycode, servtype, mdndomain, bsid))
-       """.stripMargin
+       """.stripMargin*/
+
+    val bsSQL =
+      s"""
+         |select companycode, servtype, mdndomain, bsid,
+         |       sum(reqcnt) as rn,
+         |       sum(reqfailcnt) as rfn,
+         |       sum(reqsucccnt) as rsn,
+         |       count(distinct mdn) as req_card_cnt,
+         |       sum(case when result='s' then 0 else 1 end) req_card_fcnt,
+         |       sum(case when result='s' then 1 else 0 end) req_card_scnt
+         |from
+         |(
+         |     select t.companycode, t.servtype, t.mdndomain, t.type, t.bsid, t.mdn, t.result,
+         |            count(*) as reqcnt,
+         |            sum(case when result='s' then 1 else 0 end) reqsucccnt,
+         |            sum(case when result='s' then 0 else 1 end) reqfailcnt
+         |     from   ${mdnTable} t
+         |     group by t.companycode, t.servtype, t.mdndomain, t.type, t.bsid, t.mdn, t.result
+         |) m
+         |where type='3g'
+         |group by companycode, servtype, mdndomain, bsid
+         |grouping sets((companycode, servtype, bsid), (companycode, servtype, mdndomain, bsid))
+     """.stripMargin
+
 
     val bsResultDF = sqlContext.sql(bsSQL).filter("mdndomain is null or mdndomain!='-1'").coalesce(10)
 
@@ -318,13 +342,21 @@ object AuthRealtimeAnalysis extends Logging{
       val s = if(null == x(1)) "-1" else x(1).toString // servicetype
       val v = if(null == x(2)) "-1" else x(2).toString // vpdndomain
       val bid = if(null == x(3)) "0" else x(3).toString //enbid为空的置为0
-      val rn = x(4).toString // reqcnt
-      val rsn = x(5).toString // request success cnt
+      val rn = x(4).toString  // reqcnt
+      val rfn = x(5).toString // request failed cnt
+      val rsn = x(6).toString // request success cnt
+      val rcn = x(7).toString  // req_card_cnt
+      val rfcn = x(8).toString // req card_failed cnt
+      val rscn = x(9).toString // req card_sucess cnt
 
       val rkey = dataTime + "_3g_" + c + "_" + s + "_" + v + "_" + bid
       val put = new Put(Bytes.toBytes(rkey))
       put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_rn"), Bytes.toBytes(rn))
+      put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_fn"), Bytes.toBytes(rfn))
       put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_sn"), Bytes.toBytes(rsn))
+      put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_rcn"), Bytes.toBytes(rcn))
+      put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_fcn"), Bytes.toBytes(rfcn))
+      put.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_scn"), Bytes.toBytes(rscn))
       (new ImmutableBytesWritable, put)
     })
     HbaseDataUtil.saveRddToHbase(resultBSHtable, bsResultRDD)

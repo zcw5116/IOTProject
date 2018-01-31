@@ -35,6 +35,8 @@ object TestHbase {
     val families = new Array[String](1)
     families(0) = "basicinfo"
 
+
+
     // 创建表, 如果表存在， 自动忽略
     HbaseUtils.createIfNotExists(htable, families)
     val bsJobConf = new JobConf(conf, this.getClass)

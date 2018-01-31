@@ -6,6 +6,8 @@ import com.zyuc.stat.iot.etl.util.{AuthLogConverterUtils, CDRConverterUtils, Com
 import com.zyuc.stat.properties.ConfigProperties
 import com.zyuc.stat.utils.FileUtils.{makeCoalesce, renameHDFSDir}
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.io.{LongWritable, Text}
+import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.apache.spark.sql.hive.HiveContext
@@ -48,6 +50,7 @@ object CDRETL extends Logging{
 
   def doJob(parentContext: SQLContext, fileSystem:FileSystem, appName:String, loadTime:String, inputPath:String, outputPath:String, fileWildcard:String, coalesceSize:Int, logType:String, logTableName:String):String = {
     val sqlContext = parentContext.newSession()
+    val sc = parentContext.sparkContext
 
     sqlContext.sql("use " + ConfigProperties.IOT_HIVE_DATABASE)
     if (logType != CDRConverterUtils.LOG_TYPE_HACCG && logType != CDRConverterUtils.LOG_TYPE_PDSN && logType != CDRConverterUtils.LOG_TYPE_PGW) {
@@ -84,7 +87,8 @@ object CDRETL extends Logging{
       return "appName:" + appName + ":No Files ."
     }
 
-    val srcCDRDF = sqlContext.read.format("json").load(cdrLocation)
+    val jsonRDD = sc.hadoopFile(cdrLocation,classOf[TextInputFormat],classOf[LongWritable],classOf[Text],1).map(p => new String(p._2.getBytes, 0, p._2.getLength, "GBK"))
+    val srcCDRDF = sqlContext.read.json(jsonRDD)
 
     val cdrDF = CDRConverterUtils.parse(srcCDRDF, logType)
     if (cdrDF == null) {

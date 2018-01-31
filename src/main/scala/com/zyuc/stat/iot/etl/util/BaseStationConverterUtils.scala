@@ -26,21 +26,21 @@ object BaseStationConverterUtils extends Logging{
 
     def parseLine(line:String) :Row = {
       try {
-        val p = line.split("\\|", 63)
-        val enbid = p(2)
-        val provId = if(null == p(6)) "" else p(6)
-        val provName = if(null == p(7)) "" else p(7)
-        val cityId = if(null == p(8)) "" else p(8)// regionId, 应该是oracle表数据字段对应错误
-        val cityName = if(null == p(9)) "" else p(9) // regionName, 应该是oracle表数据字段对应错误
-        val zhLabel = if(null == p(19)) "" else p(19)
-        val userLabel = if(null == p(20)) "" else p(20)
-        val vendorId = if(null == p(21)) "" else p(21)
-        val vndorName = if(null == p(22)) "" else p(22)
+        val p = line.replaceAll("\"","").split(",", 10)
+        val enbid = p(0)
+        val provId = if(null == p(1)) "" else p(1)
+        val provName = if(null == p(2)) "" else p(2)
+        val cityId = if(null == p(3)) "" else p(3)   // regionId, 应该是oracle表数据字段对应错误
+        val cityName = if(null == p(4)) "" else p(4) // regionName, 应该是oracle表数据字段对应错误
+        val zhLabel = if(null == p(5)) "" else p(5)
+        val userLabel = if(null == p(6)) "" else p(6)
+        val vendorId = if(null == p(7)) "" else p(7)
+        val vndorName = if(null == p(8)) "" else p(8)
 
         Row(enbid, provId, provName, cityId, cityName, zhLabel, userLabel, vendorId, vndorName)
       }catch {
         case e:Exception => {
-          logError("ParseError log[" + line + "] msg[" + e.getMessage + "]")
+          //logError("ParseError log[" + line + "] msg[" + e.getMessage + "]")
           Row("0")
         }
       }
