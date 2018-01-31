@@ -1,6 +1,6 @@
 package com.zyuc.stat.iot.analysis.realtime
 
-import com.zyuc.stat.iot.analysis.util.{AreaHtableConverter, HbaseDataUtil, MMEBaseStationHtableConverter}
+import com.zyuc.stat.iot.analysis.util.AreaHtableConverter
 import com.zyuc.stat.properties.ConfigProperties
 import com.zyuc.stat.utils.{DateUtils, HbaseUtils}
 import org.apache.hadoop.hbase.client.Put

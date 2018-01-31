@@ -1,7 +1,5 @@
 package test
 
-import org.apache.hadoop.hbase.util.Bytes
-
 /**
   * Created by zhoucw on 17-10-26.
   */

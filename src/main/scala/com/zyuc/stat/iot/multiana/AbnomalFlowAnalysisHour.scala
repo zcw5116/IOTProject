@@ -115,7 +115,7 @@ object AbnomalFlowAnalysisHour {
 
 
 
-
+    val dayidreal = timeid.substring(0,8)
     val coalesceNum = 1
     val outputLocatoin = outputPath  + "tmp/" + timeid + "/"
 
@@ -123,7 +123,7 @@ object AbnomalFlowAnalysisHour {
 
     resultDF.repartition(coalesceNum.toInt).write.mode(SaveMode.Overwrite).format("json").save(outputLocatoin)
 
-    FileUtils.moveTempFilesToESpath(fileSystem,outputPath,timeid,dayid)
+    FileUtils.moveTempFilesToESpath(fileSystem,outputPath,timeid,dayidreal)
     //FileUtils.downFilesToLocal(fileSystem, outputLocatoin, localOutputPath + "/"+ hourid.substring(0,8) + "/", hourid.substring(8,10), ".json")
 
     sc.stop()

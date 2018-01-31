@@ -27,7 +27,7 @@ object CommonETLUtils extends Logging {
 
 
   def saveDFtoPartition(sqlContext: SQLContext, fileSystem: FileSystem, df: DataFrame, coalesceNum: Int, partitions: String, loadtime: String, outputPath: String, partitonTable: String, appName: String):String = {
-
+    sqlContext.setConf("spark.sql.sources.partitionColumnTypeInference.enabled", "false")
     try {
       var begin = new Date().getTime
 
@@ -42,13 +42,14 @@ object CommonETLUtils extends Logging {
         val nowPath = outFiles(i).getPath.toString
         filePartitions.+=(nowPath.substring(0, nowPath.lastIndexOf("/")).replace(outputPath + "temp/" + loadtime, "").substring(1))
       }
-
+      logInfo("##########--filePartitions:" + filePartitions)
 
 
       FileUtils.moveTempFiles(fileSystem, outputPath, loadtime, partitionTemplate, filePartitions)
       logInfo("[" + appName + "] 存储用时 " + (new Date().getTime - begin) + " ms")
 
       begin = new Date().getTime
+
       filePartitions.foreach(partition => {
         var d = ""
         var h = ""

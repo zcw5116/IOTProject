@@ -2,11 +2,11 @@ package com.zyuc.stat.iot.analysis.realtime
 
 import com.zyuc.stat.iot.analysis.util.{CDRHtableConverter, HbaseDataUtil}
 import com.zyuc.stat.properties.ConfigProperties
-import com.zyuc.stat.utils.{DateUtils, HbaseUtils, MathUtil}
+import com.zyuc.stat.utils.{DateUtils, HbaseUtils}
 import org.apache.hadoop.hbase.client.Put
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable
 import org.apache.hadoop.hbase.util.Bytes
-import org.apache.spark.sql.functions.{sum, _}
+import org.apache.spark.sql.functions.sum
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{Logging, SparkConf, SparkContext}
 
@@ -56,7 +56,7 @@ object CDRRealtimeAnalysis extends Logging{
 
     val vpnToApnMapFile = sc.getConf.get("spark.app.vpnToApnMapFile", "/hadoop/IOT/ANALY_PLATFORM/BasicData/VpdnToApn/vpdntoapn.txt")
 
-    import  sqlContext.implicits._
+    import sqlContext.implicits._
 
     val vpnToApnDF  = sqlContext.read.format("text").load(vpnToApnMapFile).map(x=>x.getString(0).split(",")).map(x=>(x(0),x(1))).toDF("vpdndomain","apn")
     val vpdnAndApnTable = "vpdnAndApnTable"
@@ -361,7 +361,7 @@ object CDRRealtimeAnalysis extends Logging{
       val rkey = preDataTime.substring(2, 8) + "_" + x(0).toString
       val dayResPut = new Put(Bytes.toBytes(rkey))
       val f_c_3_u = x(1).toString
-      val f_c_3_d  = x(2).toString
+      val f_c_3_d = x(2).toString
       val f_c_4_u = x(3).toString
       val f_c_4_d = x(4).toString
       val f_c_t_u = x(5).toString

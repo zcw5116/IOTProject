@@ -1,12 +1,11 @@
 package com.zyuc.stat.iot.user
 
-import com.zyuc.stat.iot.user.UserOnlineBaseData.{logError, logInfo}
 import com.zyuc.stat.properties.ConfigProperties
 import com.zyuc.stat.utils.DateUtils.timeCalcWithFormatConvertSafe
 import com.zyuc.stat.utils.HbaseUtils
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.{Logging, SparkConf, SparkContext}
 
 /**
   * desc: 统计某个时间点的在线用户数
@@ -28,7 +27,7 @@ object OnlineBase extends Logging{
     val pgwTable = sc.getConf.get("spark.app.table.pgwTable", "iot_cdr_data_pgw")
     val haccgTable = sc.getConf.get("spark.app.table.haccgTable", "iot_cdr_data_haccg")
     val basenumTable = sc.getConf.get("spark.app.table.basenumTable", "iot_useronline_basedata")
-    val ifUpdateBaseDataTime = sc.getConf.get("spark.app.ifUpdateBaseDataTime", "Y")
+    val ifUpdateBaseDataTime = sc.getConf.get("spark.app.ifUpdateBaseDataTime", "N")
     val outputPath = sc.getConf.get("spark.app.outputPath", "/hadoop/IOT/data/online/baseData/") //
 
     if(ifUpdateBaseDataTime != "Y" && ifUpdateBaseDataTime != "N" ){
@@ -244,8 +243,7 @@ object OnlineBase extends Logging{
          |) t where u.mdn = t.mdn and u.isvpdn='1'
          |group by companycode, type
          |GROUPING SETS (companycode, (companycode, type))
-         |union all    val hivedb = ConfigProperties.IOT_HIVE_DATABASE
-
+         |union all
          |select companycode, 'C' as servtype, vpdndomain, type, count(*) as usrcnt
          |from
          |(

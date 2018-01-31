@@ -25,6 +25,8 @@ object AbnomalFlowAnalysisDay {
     val outputPath = sc.getConf.get("spark.app.outputPath") // hdfs://EPC-IOT-ES-06:8020/hadoop/IOT/data/multiAna/flow/
     val localOutputPath =  sc.getConf.get("spark.app.localOutputPath") // /slview/test/limm/multiAna/flow/hour/json/
     val partitionD = dayid.substring(2)
+
+
     // company province nettype
     val tmpCompanyTable = s"${appName}_tmp_Company"
     sqlContext.sql(
@@ -65,6 +67,7 @@ object AbnomalFlowAnalysisDay {
        """.stripMargin
     ).registerTempTable(tmpcdrtable)
 
+
     val resultDF = sqlContext.sql(
       s"""select n.custprovince,n.nettype,n.vpdncompanycode as companycode,
          |      nvl(c.usernum,0) as usernum,
@@ -78,7 +81,6 @@ object AbnomalFlowAnalysisDay {
          |on   c.vpdncompanycode = n.vpdncompanycode
          |and  c.nettype = n.nettype
        """.stripMargin
-
     )
 
 
@@ -133,12 +135,13 @@ object AbnomalFlowAnalysisDay {
 
     val coalesceNum = 1
     val tmpoutputPath = outputPath + "tmp/" + dayid + "/"
+    val daytime = dayid
 
     val fileSystem = FileSystem.newInstance(sc.hadoopConfiguration)
 
     //存储在临时目录
     resultDF.repartition(coalesceNum.toInt).write.mode(SaveMode.Overwrite).format("json").save(tmpoutputPath)
-    FileUtils.moveTempFilesToESpath(fileSystem,outputPath,dayid,dayid)
+    FileUtils.moveTempFilesToESpath(fileSystem,outputPath,dayid,daytime)
     // FileUtils.downFilesToLocal(fileSystem, outputLocatoin, localOutputPath , dayid, ".json")
 
     sc.stop()

@@ -1,10 +1,8 @@
 package com.zyuc.stat.iot.user
 
-import com.zyuc.stat.iot.etl.secondary.CDRSecondETL.logError
-import com.zyuc.stat.iot.etl.util.CDRConverterUtils
 import com.zyuc.stat.properties.ConfigProperties
 import com.zyuc.stat.utils.DateUtils.timeCalcWithFormatConvertSafe
-import com.zyuc.stat.utils.{DateUtils, FileUtils, HbaseUtils}
+import com.zyuc.stat.utils.{FileUtils, HbaseUtils}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.hive.HiveContext
@@ -33,7 +31,7 @@ object UserOnlineBaseData extends Logging{
     val curHourtime = sc.getConf.get("spark.app.hourid") // 2017072412
     val outputPath = sc.getConf.get("spark.app.outputPath") // "/hadoop/IOT/ANALY_PLATFORM/UserOnline/"
     val userTablePartitionID = sc.getConf.get("spark.app.userTablePartitionID")
-    val userTable = sc.getConf.get("spark.app.table.userTable") //"iot_customer_userinfo"
+    val userTable = sc.getConf.get("spark.app.table.userTable","iot_basic_userinfo") //"iot_customer_userinfo"=>'iot_basic_userinfo'
     val pdsnTable = sc.getConf.get("spark.app.table.pdsnTable")
     val pgwTable = sc.getConf.get("spark.app.table.pgwTable")
     val basenumTable = sc.getConf.get("spark.app.table.basenumTable", "iot_useronline_base_nums")
@@ -54,9 +52,12 @@ object UserOnlineBaseData extends Logging{
     val next2Hourid = next2Hourtime.substring(8, 10)
     val curPartDayrid = dayidOfCurHourtime
 
-    val userDF = sqlContext.table(userTable).filter("d=" + userTablePartitionID).
-      selectExpr("mdn", "imsicdma", "custprovince", "case when length(vpdncompanycode)=0 then 'N999999999' else vpdncompanycode end  as vpdncompanycode")
-    userDF.show()
+    val userDF = sqlContext.table(userTable).filter("d=" + userTablePartitionID).selectExpr("mdn", "imsicdma",
+        "case when length(belo_prov)=0 or belo_prov is null then '其他' else belo_prov end as custprovince",
+        "case when length(companycode)=0 or companycode is null then 'P999999999' else companycode end  as vpdncompanycode" )
+
+
+    userDF.show(1)
     // 缓存用户的表
     val cachedUserinfoTable = "iot_user_basic_info_cached"
     userDF.cache().registerTempTable(cachedUserinfoTable)
@@ -65,7 +66,7 @@ object UserOnlineBaseData extends Logging{
     val cachedCompanyTable = "cachedCompany"
     sqlContext.sql(s"""CACHE TABLE ${cachedCompanyTable} as select distinct custprovince, vpdncompanycode from ${cachedUserinfoTable}""")
 
-    sqlContext.table(cachedCompanyTable).show()
+    sqlContext.table(cachedCompanyTable).show(1)
     // 0点在线的用户
     var commonSql = ""
     if(dayidOfCurHourtime>dayidOflast7Hourtime){

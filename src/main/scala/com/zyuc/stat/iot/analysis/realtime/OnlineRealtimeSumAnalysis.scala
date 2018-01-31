@@ -1,6 +1,6 @@
 package com.zyuc.stat.iot.analysis.realtime
 
-import com.zyuc.stat.iot.analysis.util.{OnlineHtableConverter, HbaseDataUtil}
+import com.zyuc.stat.iot.analysis.util.{HbaseDataUtil, OnlineHtableConverter}
 import com.zyuc.stat.properties.ConfigProperties
 import com.zyuc.stat.utils.{DateUtils, HbaseUtils}
 import org.apache.hadoop.hbase.client.Put
@@ -9,8 +9,6 @@ import org.apache.hadoop.hbase.util.Bytes
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{Logging, SparkConf, SparkContext}
-
-import scala.collection.mutable
 
 /**
   * Created by zhoucw on 17-10-8.

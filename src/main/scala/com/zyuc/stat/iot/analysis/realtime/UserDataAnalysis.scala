@@ -2,7 +2,7 @@ package com.zyuc.stat.iot.analysis.realtime
 
 import com.zyuc.stat.iot.analysis.util.HbaseDataUtil
 import com.zyuc.stat.properties.ConfigProperties
-import com.zyuc.stat.utils.{DateUtils, HbaseUtils}
+import com.zyuc.stat.utils.HbaseUtils
 import org.apache.hadoop.hbase.client.Put
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable
 import org.apache.hadoop.hbase.util.Bytes

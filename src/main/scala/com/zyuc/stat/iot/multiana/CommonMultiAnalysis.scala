@@ -48,18 +48,20 @@ object CommonMultiAnalysis extends Logging {
     logInfo("##########--endtime: " + endtime)
     logInfo("##########--interval: " + interval)
     logInfo("##########--cyctype: " + cyctype)
-
+    logInfo("##########--inputPath: " + inputPath)
     //每次执行一个周期，最小周期为小时
     if(cyctype == "min"){
       intervalbegin = intervals*(-1)
       intervalend = intervals*(-1)+60*60
       timeformat = "yyyyMMddHHmm"
       timeid = begintime.substring(0,10)
+      dayid = timeid.substring(0,8)
     }else if(cyctype == "h"){
       intervalbegin = intervals*(-1)
       intervalend = intervals*(-1)
       timeformat = "yyyyMMddHH"
       timeid = begintime.substring(0,10)
+      dayid = timeid.substring(0,8)
     }else if(cyctype == "d"){
       intervalbegin = 0
       intervalend = 0
@@ -277,12 +279,13 @@ object CommonMultiAnalysis extends Logging {
     if(ItmeName == "authlog_3gaaa"){
       resultDF = filterDF.groupBy(
         when (length(filterDF.col("custprovince"))===0,"其他").when(filterDF.col("custprovince").isNull,"其他").otherwise(filterDF.col("custprovince")).alias("custprovince"),
-        when (length(filterDF.col("vpdncompanycode"))===0,"N999999999").when(filterDF.col("vpdncompanycode").isNull,"N999999999").otherwise(filterDF.col("vpdncompanycode")).alias("companycode"),
+        when (length(filterDF.col("vpdncompanycode"))===0,"P999999999").when(filterDF.col("vpdncompanycode").isNull,"N999999999").otherwise(filterDF.col("vpdncompanycode")).alias("companycode"),
         from_unixtime(ceil((unix_timestamp(filterDF.col("authtime"),"yyyyMMddHHmmss") - btimestamp)/intervals)*intervals+btimestamp,s"$timeformat").as("datetime"),
         filterDF.col("result"),
         filterDF.col("auth_result").as("errorcode")).
-        agg(  count(lit(1)).alias("requirecnt"),
-          sum(when (filterDF.col("result")==="failed",1).otherwise(0)).alias("errcnt"),
+        agg(
+          sum(when (length(filterDF.col("imsicdma"))>0,1).otherwise(0)).alias("requirecnt"),
+          sum(when (filterDF.col("result")==="failed" and length(filterDF.col("imsicdma"))>0,1).otherwise(0)).alias("errcnt"),
           countDistinct((when(filterDF.col("result")==="failed",filterDF.col("imsicdma")))).as("errmdncnt"),
           countDistinct(filterDF.col("imsicdma")).as("mdncnt")
         )
@@ -290,30 +293,34 @@ object CommonMultiAnalysis extends Logging {
       if(filterDF == null){
         logInfo(s"##########--${ItmeName}: resultDF is null")
       }
+      filterDF.show(5)
       resultDF = filterDF.groupBy(
         when (length(filterDF.col("custprovince"))===0,"其他").when(filterDF.col("custprovince").isNull,"其他").otherwise(filterDF.col("custprovince")).alias("custprovince"),
-        when (length(filterDF.col("vpdncompanycode"))===0,"N999999999").when(filterDF.col("vpdncompanycode").isNull,"N999999999").otherwise(filterDF.col("vpdncompanycode")).alias("companycode"),
+        when (length(filterDF.col("vpdncompanycode"))===0,"P999999999").when(filterDF.col("vpdncompanycode").isNull,"N999999999").otherwise(filterDF.col("vpdncompanycode")).alias("companycode"),
         from_unixtime(ceil((unix_timestamp(filterDF.col("authtime"),"yyyyMMddHHmmss") - btimestamp)/intervals)*intervals+btimestamp,s"$timeformat").as("datetime"),
         filterDF.col("result"),
         filterDF.col("auth_result").as("errorcode")).
-        agg(  count(lit(1)).alias("requirecnt"),
-          sum(when (filterDF.col("result")==="failed",1).otherwise(0)).alias("errcnt"),
+        agg(
+          sum(when (length(filterDF.col("mdn"))>0,1).otherwise(0)).alias("requirecnt"),
+          sum(when (filterDF.col("result")==="failed" and length(filterDF.col("mdn"))>0,1).otherwise(0)).alias("errcnt"),
           countDistinct((when(filterDF.col("result")==="failed",filterDF.col("mdn")))).as("errmdncnt"),
           countDistinct(filterDF.col("mdn")).as("mdncnt")
         )
+      resultDF.show(5)
     }else if(ItmeName == "mme"){
 
       resultDF = filterDF.groupBy(
         when (length(filterDF.col("custprovince"))===0,"其他").when(filterDF.col("custprovince").isNull,"其他").otherwise(filterDF.col("custprovince")).alias("custprovince"),
-        when (length(filterDF.col("vpdncompanycode"))===0,"N999999999").when(filterDF.col("vpdncompanycode").isNull,"N999999999").otherwise(filterDF.col("vpdncompanycode")).alias("companycode"),
+        when (length(filterDF.col("vpdncompanycode"))===0,"P999999999").when(filterDF.col("vpdncompanycode").isNull,"N999999999").otherwise(filterDF.col("vpdncompanycode")).alias("companycode"),
         filterDF.col("province"),
         when(filterDF.col("devicetype").isNull,"").otherwise(filterDF.col("devicetype")).alias("devicetype"),
         when(filterDF.col("modelname").isNull,"").otherwise(filterDF.col("modelname")).alias("modelname"),
         from_unixtime(ceil((unix_timestamp(filterDF.col("starttime"),"yyyy-MM-dd HH:mm:ss.SSS") - btimestamp)/intervals)*intervals+btimestamp,s"$timeformat").as("datetime"),
         filterDF.col("result"),
         filterDF.col("pcause").as("errorcode")).
-        agg(  count(lit(1)).alias("requirecnt"),
-          sum(when (filterDF.col("result")==="failed",1).otherwise(0)).alias("errcnt"),
+        agg(
+          sum(when (length(filterDF.col("mdn"))>0,1).otherwise(0)).alias("requirecnt"),
+          sum(when (filterDF.col("result")==="failed" and length(filterDF.col("mdn"))>0,1).otherwise(0)).alias("errcnt"),
           countDistinct((when(filterDF.col("result")==="failed",filterDF.col("mdn")))).as("errmdncnt"),
           countDistinct(filterDF.col("mdn")).as("mdncnt")
         )
@@ -339,8 +346,9 @@ object CommonMultiAnalysis extends Logging {
         when (length(filterDF.col("vpdncompanycode"))===0,"N999999999").when(filterDF.col("vpdncompanycode").isNull,"N999999999").otherwise(filterDF.col("vpdncompanycode")).alias("companycode"),
         filterDF.col("result"),
         filterDF.col("auth_result").as("errorcode")).
-        agg(  count(lit(1)).alias("requirecnt"),
-          sum(when (filterDF.col("result")==="failed",1).otherwise(0)).alias("errcnt"),
+        agg(
+          sum(when (length(filterDF.col("imsicdma"))>0,1).otherwise(0)).alias("requirecnt"),
+          sum(when (filterDF.col("result")==="failed" and length(filterDF.col("imsicdma"))>0,1).otherwise(0)).alias("errcnt"),
           countDistinct((when(filterDF.col("result")==="failed",filterDF.col("imsicdma")))).as("errmdncnt"),
           countDistinct(filterDF.col("imsicdma")).as("mdncnt")
         ).withColumn("datetime",lit(dayid))
@@ -350,8 +358,9 @@ object CommonMultiAnalysis extends Logging {
         when (length(filterDF.col("vpdncompanycode"))===0,"N999999999").when(filterDF.col("vpdncompanycode").isNull,"N999999999").otherwise(filterDF.col("vpdncompanycode")).alias("companycode"),
         filterDF.col("result"),
         filterDF.col("auth_result").as("errorcode")).
-        agg(  count(lit(1)).alias("requirecnt"),
-          sum(when (filterDF.col("result")==="failed",1).otherwise(0)).alias("errcnt"),
+        agg(
+          sum(when (length(filterDF.col("mdn"))>0,1).otherwise(0)).alias("requirecnt"),
+          sum(when (filterDF.col("result")==="failed" and length(filterDF.col("mdn"))>0,1).otherwise(0)).alias("errcnt"),
           countDistinct((when(filterDF.col("result")==="failed",filterDF.col("mdn")))).as("errmdncnt"),
           countDistinct(filterDF.col("mdn")).as("mdncnt")
         ).withColumn("datetime",lit(dayid))
@@ -364,8 +373,9 @@ object CommonMultiAnalysis extends Logging {
         when(filterDF.col("modelname").isNull,"").otherwise(filterDF.col("modelname")).alias("modelname"),
         filterDF.col("result"),
         filterDF.col("pcause").as("errorcode")).
-        agg(  count(lit(1)).alias("requirecnt"),
-          sum(when (filterDF.col("result")==="failed",1).otherwise(0)).alias("errcnt"),
+        agg(
+          sum(when (length(filterDF.col("mdn"))>0,1).otherwise(0)).alias("requirecnt"),
+          sum(when (filterDF.col("result")==="failed" and length(filterDF.col("mdn"))>0,1).otherwise(0)).alias("errcnt"),
           countDistinct((when(filterDF.col("result")==="failed",filterDF.col("mdn")))).as("errmdncnt"),
           countDistinct(filterDF.col("mdn")).as("mdncnt")
         ).withColumn("datetime",lit(dayid))

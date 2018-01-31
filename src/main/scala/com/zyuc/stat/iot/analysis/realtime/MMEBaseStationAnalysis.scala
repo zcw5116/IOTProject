@@ -1,12 +1,11 @@
 package com.zyuc.stat.iot.analysis.realtime
 
-import com.zyuc.stat.iot.analysis.util.{HbaseDataUtil, MMEBaseStationHtableConverter, MMEHtableConverter}
+import com.zyuc.stat.iot.analysis.util.{HbaseDataUtil, MMEBaseStationHtableConverter}
 import com.zyuc.stat.properties.ConfigProperties
-import com.zyuc.stat.utils.{DateUtils, HbaseUtils, MathUtil}
+import com.zyuc.stat.utils.{DateUtils, HbaseUtils}
 import org.apache.hadoop.hbase.client.Put
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable
 import org.apache.hadoop.hbase.util.Bytes
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{Logging, SparkConf, SparkContext}
 
