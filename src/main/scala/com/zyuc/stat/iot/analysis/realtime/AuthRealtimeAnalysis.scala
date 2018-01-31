@@ -278,6 +278,7 @@ object AuthRealtimeAnalysis extends Logging{
 
       val dayResKey = dataTime.substring(2,8) + "_" + companyCode + "_" + servType + "_" + domain
       val dayResPut = new Put(Bytes.toBytes(dayResKey))
+      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_bp_time"), Bytes.toBytes(dataTime.substring(2,8)))
       dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_c_" + netFlag + "_rn"), Bytes.toBytes(reqCnt))
       dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_c_" + netFlag + "_sn"), Bytes.toBytes(reqSuccCnt))
       dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_c_" + netFlag + "_rat"), Bytes.toBytes(MathUtil.divOpera(reqSuccCnt, reqCnt)))
@@ -425,56 +426,6 @@ object AuthRealtimeAnalysis extends Logging{
     HbaseDataUtil.saveRddToHbase(resultDayHtable, accumRDD)
 
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////
-    //  统计历史同期的数据
-    //
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////
-    val hisDataTime = DateUtils.timeCalcWithFormatConvertSafe(dataTime, "yyyyMMddHHmm", -hisDayNum*24*60*60, "yyyyMMddHHmm")
-    val hisDF = AuthHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + hisDataTime.substring(0, 8)).filter("time='" + hisDataTime.substring(8, 12) + "'")
-
-    if(hisDF != null){
-      val hisResDF = hisDF.select("compnyAndSerAndDomain", "a_c_3_rn", "a_c_3_sn", "a_c_4_rn",
-        "a_c_4_sn", "a_c_v_rn", "a_c_v_sn", "a_c_t_rn", "a_c_t_sn",
-        "a_c_3_rat", "a_c_4_rat", "a_c_v_rat", "a_c_t_rat")
-
-     val hisResRDD = hisResDF.repartition(10).rdd.map(x=>{
-        val rkey = dataTime.substring(2, 8) + "_" + x(0).toString
-        val req_3g_cnt = x(1).toString
-        val req_succ_3g_cnt = x(2).toString
-        val req_4g_cnt = x(3).toString
-        val req_succ_4g_cnt = x(4).toString
-        val req_vpdn_cnt = x(5).toString
-        val req_succ_vpdn_cnt = x(6).toString
-        val req_total_cnt = x(7).toString
-        val req_succ_total_cnt = x(8).toString
-        val req_3g_ration = x(9).toString
-        val req_4g_ration = x(10).toString
-        val req_vpdn_ration = x(11).toString
-        val req_total_ration = x(12).toString
-
-
-        val dayResPut = new Put(Bytes.toBytes(rkey))
-        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_h_3_rn"), Bytes.toBytes(req_3g_cnt))
-        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_h_3_sn"), Bytes.toBytes(req_succ_3g_cnt))
-        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_h_4_rn"), Bytes.toBytes(req_3g_cnt))
-        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_h_4_sn"), Bytes.toBytes(req_succ_3g_cnt))
-        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_h_v_rn"), Bytes.toBytes(req_3g_cnt))
-
-        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_h_v_sn"), Bytes.toBytes(req_succ_3g_cnt))
-        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_h_t_rn"), Bytes.toBytes(req_3g_cnt))
-        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_h_t_sn"), Bytes.toBytes(req_succ_3g_cnt))
-        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_h_3_rat"), Bytes.toBytes(req_3g_ration))
-        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_h_4_rat"), Bytes.toBytes(req_4g_ration))
-
-        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_h_v_rat"), Bytes.toBytes(req_vpdn_ration))
-        dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("a_h_t_rat"), Bytes.toBytes(req_total_ration))
-
-        (new ImmutableBytesWritable, dayResPut)
-
-      })
-
-      // HbaseDataUtil.saveRddToHbase(resultDayHtable, hisResRDD)
-    }
 
 
 

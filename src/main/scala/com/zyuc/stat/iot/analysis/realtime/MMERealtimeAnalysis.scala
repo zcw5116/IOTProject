@@ -46,6 +46,8 @@ object MMERealtimeAnalysis extends Logging{
     val resultBSHtable = sc.getConf.get("spark.app.htable.resultBSHtable", "analyze_summ_rst_bs")
     val analyzeBPHtable = sc.getConf.get("spark.app.htable.analyzeBPHtable", "analyze_bp_tab")
 
+    val failedBSHTable = sc.getConf.get("spark.app.htable.failedBSHTable", "analyze_summ_rst_failedbs")
+
 
 
     // 实时分析类型： 0-后续会离线重跑数据, 2-后续不会离线重跑数据
@@ -119,6 +121,12 @@ object MMERealtimeAnalysis extends Logging{
     val bsFamilies = new Array[String](1)
     bsFamilies(0) = "r"
     HbaseUtils.createIfNotExists(resultBSHtable, bsFamilies)
+
+
+    // resultBSHtable
+    val bsFailedFamilies = new Array[String](1)
+    bsFailedFamilies(0) = "bs"
+    HbaseUtils.createIfNotExists(failedBSHTable, bsFailedFamilies)
 
     ////////////////////////////////////////////////////////////////
     //   cache table
@@ -282,6 +290,7 @@ object MMERealtimeAnalysis extends Logging{
 
       val dayResKey = dataTime.substring(2,8) + "_" + companyCode + "_" + servType + "_" + domain
       val dayResPut = new Put(Bytes.toBytes(dayResKey))
+      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("ma_bp_time"), Bytes.toBytes(dataTime.substring(2,8)))
       dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("ma_c_" + netFlag + "_rn"), Bytes.toBytes(reqCnt))
       dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("ma_c_" + netFlag + "_sn"), Bytes.toBytes(reqSuccCnt))
       dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("ma_c_" + netFlag + "_rat"), Bytes.toBytes(MathUtil.divOpera(reqSuccCnt, reqCnt)))
@@ -352,36 +361,43 @@ object MMERealtimeAnalysis extends Logging{
       (new ImmutableBytesWritable, put)
     })
     HbaseDataUtil.saveRddToHbase(resultBSHtable, bsResultRDD)
+
+
+
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
     //   失败原因写入
     //
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    val failedMDN =
+      s"""
+         |    select t.companycode, 'D' as servtype, "-1" as vpdndomain, t.mdn, t.pcause, t.enbid
+         |    from ${mdnTable} t where t.isdirect='1' and t.result='failed'
+         |    union all
+         |    select companycode, servtype, c.vpdndomain, mdn, pcause, enbid
+         |    from
+         |    (
+         |         select t.companycode, 'C' as servtype, t.vpdndomain, t.mdn, t.pcause, t.enbid
+         |        from ${mdnTable} t where t.isvpdn='1' and result='failed'
+         |    ) s lateral view explode(split(s.vpdndomain,',')) c as vpdndomain
+         |    union all
+         |    select t.companycode, 'C' as servtype, '-1' as vpdndomain, t.mdn, t.pcause, t.enbid
+         |    from ${mdnTable} t where t.isvpdn='1' and result='failed'
+         |    union all
+         |    select t.companycode, 'P' as servtype, "-1" as vpdndomain, t.mdn, t.pcause, t.enbid
+         |    from ${mdnTable} t where t.iscommon='1' and result='failed'
+         |    union all
+         |     select t.companycode, '-1' as servtype, "-1" as vpdndomain, t.mdn, t.pcause, t.enbid
+         |    from ${mdnTable} t where  result='failed'
+       """.stripMargin
+    val mdnFailedTable = "mdnFailedTable_" + dataTime
+    sqlContext.sql(failedMDN).registerTempTable(mdnFailedTable)
 
     val failedSQL =
       s"""
          |select companycode, servtype, vpdndomain, pcause as errcode,
          |count(*) errCnt
-         |from
-         |(
-         |    select t.companycode, 'D' as servtype, "-1" as vpdndomain, t.mdn, t.pcause
-         |    from ${mdnTable} t where t.isdirect='1' and t.result='failed'
-         |    union all
-         |    select companycode, servtype, c.vpdndomain, mdn, pcause
-         |    from
-         |    (
-         |         select t.companycode, 'C' as servtype, t.vpdndomain, t.mdn, t.pcause
-         |        from ${mdnTable} t where t.isvpdn='1' and result='failed'
-         |    ) s lateral view explode(split(s.vpdndomain,',')) c as vpdndomain
-         |    union all
-         |    select t.companycode, 'C' as servtype, '-1' as vpdndomain, t.mdn, t.pcause
-         |    from ${mdnTable} t where t.isvpdn='1' and result='failed'
-         |    union all
-         |    select t.companycode, 'P' as servtype, "-1" as vpdndomain, t.mdn, t.pcause
-         |    from ${mdnTable} t where t.iscommon='1' and result='failed'
-         |    union all
-         |     select t.companycode, '-1' as servtype, "-1" as vpdndomain, t.mdn, t.pcause
-         |    from ${mdnTable} t where  result='failed'
-         |) m
+         |from ${mdnFailedTable}
          |group by companycode, servtype, vpdndomain, pcause
        """.stripMargin
 
@@ -407,6 +423,53 @@ object MMERealtimeAnalysis extends Logging{
     })
     HbaseDataUtil.saveRddToHbase(curResultHtable, failedRDD.map(_._1))
     HbaseDataUtil.saveRddToHbase(curAlarmHtable, failedRDD.map(_._2))
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //   错误站点排行
+    //
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    val failedBSsql =
+      s"""
+         |select  companycode, servtype, vpdndomain, nvl(t.enbid, '0') as enbid, errCnt,
+         |        nvl(b.provname, '其它') provname, nvl(b.cityname, '其它') cityname, nvl(b.zhlabel,'其它') enbname,
+         |        row_number() over(partition by companycode, servtype, vpdndomain order by errCnt desc ) bsrank
+         |from
+         |(
+         |    select m.companycode, m.servtype, m.vpdndomain, m.enbid, count(*) errCnt
+         |    from ${mdnFailedTable} m
+         |    group by m.companycode, m.servtype, m.vpdndomain, m.enbid
+         |) t left join ${bs4gTable} b on(t.enbid = b.enbid)
+       """.stripMargin
+
+
+    val failedBsDF = sqlContext.sql(failedBSsql).filter("bsrank<1000").coalesce(10)
+    val failedRBsDD = failedBsDF.rdd.map(x=>{
+      val companyCode = x(0).toString
+      val servType = if(null == x(1)) "-1" else x(1).toString
+      val servFlag = if(servType == "D") "D" else if(servType == "C") "C"  else if(servType == "P") "P"  else "-1"
+      val domain = if(null == x(2)) "-1" else x(2).toString
+      val enbid = if(null == x(3)) "-1" else x(3).toString
+      val errCnt = x(4).toString
+      val provName = if(null == x(5)) "-1" else x(5).toString
+      val cityName = if(null == x(6)) "-1" else x(6).toString
+      val enbName = if(null == x(7)) "-1" else x(7).toString
+      val bsRank = if(null == x(8)) 999 else x(8).toString
+
+
+      val curResKey = companyCode +"_" + servType + "_" + domain + "_" + dataTime.substring(0,12) + "_" + bsRank.toString.formatted("%3s").replaceAll(" ", "0")
+      val curResPut = new Put(Bytes.toBytes(curResKey))
+      curResPut.addColumn(Bytes.toBytes("bs"), Bytes.toBytes("ma_enbid"), Bytes.toBytes(enbid))
+      curResPut.addColumn(Bytes.toBytes("bs"), Bytes.toBytes("ma_errcnt"), Bytes.toBytes(errCnt))
+      curResPut.addColumn(Bytes.toBytes("bs"), Bytes.toBytes("ma_provname"), Bytes.toBytes(provName))
+      curResPut.addColumn(Bytes.toBytes("bs"), Bytes.toBytes("ma_cityname"), Bytes.toBytes(cityName))
+      curResPut.addColumn(Bytes.toBytes("bs"), Bytes.toBytes("ma_enbname"), Bytes.toBytes(enbName))
+
+      (new ImmutableBytesWritable, curResPut)
+    })
+    HbaseDataUtil.saveRddToHbase(failedBSHTable, failedRBsDD)
+
+
 
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -470,7 +533,6 @@ object MMERealtimeAnalysis extends Logging{
 
       HbaseDataUtil.saveRddToHbase(resultDayHtable, hisResRDD)
     }
-
 
 
     // 更新时间, 断点时间比数据时间多1分钟

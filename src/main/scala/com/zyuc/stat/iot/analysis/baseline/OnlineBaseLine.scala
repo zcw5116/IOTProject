@@ -68,7 +68,7 @@ object OnlineBaseLine {
         println("2")
         hbaseDF = hbaseDF.unionAll(OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + modeName + "_" + dayid, null).filter(s"time>='${dayM5Time}'"))
       }
-      else if(i>1){
+      else if(i>0){
         hbaseDF = hbaseDF.unionAll(OnlineHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + modeName + "_" + dayid, null))
       }
     }
@@ -91,9 +91,9 @@ object OnlineBaseLine {
       s"""
          |select compnyAndSerAndDomain, time,
          |o_c_3_on, o_c_4_on, o_c_t_on,
-         |row_number() over(partition by compnyAndSerAndDomain, time order by o_c_3_on) o_c_3_on_rn,
-         |row_number() over(partition by compnyAndSerAndDomain, time order by o_c_4_on) o_c_4_on_rn,
-         |row_number() over(partition by compnyAndSerAndDomain, time order by o_c_t_on) o_c_t_on_rn
+         |row_number() over(partition by compnyAndSerAndDomain, time order by cast(o_c_3_on as double)) o_c_3_on_rn,
+         |row_number() over(partition by compnyAndSerAndDomain, time order by cast(o_c_4_on as double)) o_c_4_on_rn,
+         |row_number() over(partition by compnyAndSerAndDomain, time order by cast(o_c_t_on as double)) o_c_t_on_rn
          |from ${tmpTable}
        """.stripMargin
 

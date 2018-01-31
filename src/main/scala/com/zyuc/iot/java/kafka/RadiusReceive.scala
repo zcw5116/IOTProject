@@ -41,6 +41,8 @@ object RadiusReceive extends GetProperties {
 
     val sc = new SparkContext(sparkConf)
 
+    val groupName = sc.getConf.get("spark.app.groupName", "haradiusToHive2")
+
     val ssc = new StreamingContext(sc, Seconds(300))
     // 创建stream时使用的topic名字集合
     val topics: Set[String] = Set("haradius_out")
@@ -48,8 +50,7 @@ object RadiusReceive extends GetProperties {
     val zkClient = new ZkClient(prop.getProperty("kafka.zookeeper.list"))
     // 配置信息
     val kafkaParams = Map[String, String]("metadata.broker.list" -> prop.getProperty("kafka.metadata.broker.list"))
-    // 获取topic和partition参数
-    val groupName = "haradiusToHive1"
+
     // 获取kafkaStream
     val kafkaStream = SparkKafkaUtils.createDirectKafkaStream(ssc, kafkaParams, zkClient, topics, groupName)
 

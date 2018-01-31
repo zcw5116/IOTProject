@@ -287,6 +287,7 @@ object CDRRealtimeAnalysis extends Logging{
 
       val dayResKey = dataTime.substring(2,8) + "_" + companyCode + "_" + servType + "_" + domain
       val dayResPut = new Put(Bytes.toBytes(dayResKey))
+      dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_bp_time"), Bytes.toBytes(dataTime.substring(2,8)))
       dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_u"), Bytes.toBytes(upflow))
       dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_d"), Bytes.toBytes(downflow))
       dayResPut.addColumn(Bytes.toBytes("s"), Bytes.toBytes("f_c_" + netFlag + "_t"), Bytes.toBytes(totalflow))

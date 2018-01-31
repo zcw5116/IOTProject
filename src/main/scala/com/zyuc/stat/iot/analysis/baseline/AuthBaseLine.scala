@@ -66,7 +66,7 @@ object AuthBaseLine {
         println("2")
         hbaseDF = hbaseDF.unionAll(AuthHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + modeName + "_" + dayid).filter(s"time>='${dayM5Time}'"))
       }
-      else if(i>1){
+      else if(i>0){
         hbaseDF = hbaseDF.unionAll(AuthHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + modeName + "_" + dayid))
       }
     }
@@ -94,14 +94,14 @@ object AuthBaseLine {
          |select compnyAndSerAndDomain, time,
          |a_c_3_rat, a_c_4_rat, a_c_v_rat, a_c_t_rat,
          |a_c_3_crat, a_c_4_crat,a_c_v_crat, a_c_t_crat,
-         |row_number() over(partition by compnyAndSerAndDomain, time order by a_c_3_rat) a_c_3_rat_rn,
-         |row_number() over(partition by compnyAndSerAndDomain, time order by a_c_4_rat) a_c_4_rat_rn,
-         |row_number() over(partition by compnyAndSerAndDomain, time order by a_c_v_rat) a_c_v_rat_rn,
-         |row_number() over(partition by compnyAndSerAndDomain, time order by a_c_t_rat) a_c_t_rat_rn,
-         |row_number() over(partition by compnyAndSerAndDomain, time order by a_c_3_crat) a_c_3_crat_rn,
-         |row_number() over(partition by compnyAndSerAndDomain, time order by a_c_4_crat) a_c_4_crat_rn,
-         |row_number() over(partition by compnyAndSerAndDomain, time order by a_c_v_crat) a_c_v_crat_rn,
-         |row_number() over(partition by compnyAndSerAndDomain, time order by a_c_t_crat) a_c_t_crat_rn
+         |row_number() over(partition by compnyAndSerAndDomain, time order by cast(a_c_3_rat as double)) a_c_3_rat_rn,
+         |row_number() over(partition by compnyAndSerAndDomain, time order by cast(a_c_4_rat as double)) a_c_4_rat_rn,
+         |row_number() over(partition by compnyAndSerAndDomain, time order by cast(a_c_v_rat as double)) a_c_v_rat_rn,
+         |row_number() over(partition by compnyAndSerAndDomain, time order by cast(a_c_t_rat as double)) a_c_t_rat_rn,
+         |row_number() over(partition by compnyAndSerAndDomain, time order by cast(a_c_3_crat as double)) a_c_3_crat_rn,
+         |row_number() over(partition by compnyAndSerAndDomain, time order by cast(a_c_4_crat as double)) a_c_4_crat_rn,
+         |row_number() over(partition by compnyAndSerAndDomain, time order by cast(a_c_v_crat as double)) a_c_v_crat_rn,
+         |row_number() over(partition by compnyAndSerAndDomain, time order by cast(a_c_t_crat as double)) a_c_t_crat_rn
          |from ${tmpTable}
        """.stripMargin
 

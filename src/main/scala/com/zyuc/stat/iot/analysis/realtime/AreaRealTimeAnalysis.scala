@@ -40,7 +40,6 @@ object AreaRealTimeAnalysis extends Logging {
     val bs3gTable = sc.getConf.get("spark.app.table.bs4gTable", "iot_basestation_3g")
 
     val analyzeBPHtable = sc.getConf.get("spark.app.htable.analyzeBPHtable", "analyze_bp_tab")
-    val analyType = "d"
 
     val dataTime = appName.substring(appName.lastIndexOf("_") + 1)
 
@@ -71,25 +70,25 @@ object AreaRealTimeAnalysis extends Logging {
              |cache table ${bsTable} as
              |select cAndSAndD, nettype, provid, provname, cityid, cityname, enbid, enbname,
              |       sum(ma_sn) as ma_sn, sum(ma_rn) as ma_rn, sum(a_sn) as a_sn, sum(a_rn) as a_rn,
-             |       sum(f_d) as f_d, sum(f_u) as f_u, sum(f_t) as f_t
+             |       sum(f_d) as f_d, sum(f_u) as f_u, sum(f_t) as f_t, sum(o_ln) as o_ln, sum(o_fln) as o_fln
              |from
              |(
              |    select  h.cAndSAndD, '3g' nettype, nvl(b.provcode, '0') provid, nvl(b.provname, '0') provname,
              |            nvl(b.citycode, '0') cityid, nvl(b.cityname, '0') cityname,
-             |            nvl(h.enbid, '0') enbid, nvl(concat_ws('_', h.enbid, b.cityname), '0')  enbname,
-             |            h.ma_sn, h.ma_rn, h.a_sn, h.a_rn, h.f_d, h.f_u, (h.f_d + h.f_u) f_t
+             |            nvl(h.enbid, '0') enbid, nvl(concat_ws('_', h.enbid, b.cityname), h.enbid)  enbname,
+             |            h.ma_sn, h.ma_rn, h.a_sn, h.a_rn, h.f_d, h.f_u, (h.f_d + h.f_u) f_t, h.o_ln, h.o_fln
              |    from    ${tmpCurHtable} h left join ${bs3gTable} b on(substr(h.enbid, 1, 4) = b.bsidpre)
              |    where   h.nettype='3g'
              |    union all
              |    select  h.cAndSAndD, '4g' nettype, nvl(b.provid, '0') provid, nvl(b.provname, '0') provname,
              |            nvl(b.cityid, '0') cityid, nvl(b.cityname, '0') cityname,
-             |            nvl(b.enbid, '0') enbid, nvl(b.zhlabel,'0') enbname,
-             |            h.ma_sn, h.ma_rn, h.a_sn, h.a_rn, h.f_d, h.f_u, (h.f_d + h.f_u) f_t
+             |            nvl(b.enbid, h.enbid) enbid, nvl(b.zhlabel,h.enbid) enbname,
+             |            h.ma_sn, h.ma_rn, h.a_sn, h.a_rn, h.f_d, h.f_u, (h.f_d + h.f_u) f_t, h.o_ln, h.o_fln
              |    from    ${tmpCurHtable} h left join ${bs4gTable} b on(h.enbid = b.enbid)
              |    where  h.nettype='4g'
              |    union all
              |    select  cAndSAndD, nettype, provid, provname, cityid, cityname, enbid, enbname,
-             |            ma_sn, ma_rn, a_sn, a_rn, f_d, f_u,  (f_d + f_u) f_t
+             |            ma_sn, ma_rn, a_sn, a_rn, f_d, f_u,  (f_d + f_u) f_t, o_ln, o_fln
              |    from    ${baseTmpTable}
              |) t
              |group by cAndSAndD, nettype, provid, provname, cityid, cityname, enbid, enbname
@@ -107,20 +106,20 @@ object AreaRealTimeAnalysis extends Logging {
              |cache table ${bsTable} as
              |select cAndSAndD, nettype, provid, provname, cityid, cityname, enbid, enbname,
              |       sum(ma_sn) as ma_sn, sum(ma_rn) as ma_rn, sum(a_sn) as a_sn, sum(a_rn) as a_rn,
-             |       sum(f_d) as f_d, sum(f_u) as f_u, sum(f_t) as f_t
+             |       sum(f_d) as f_d, sum(f_u) as f_u, sum(f_t) as f_t, sum(o_ln) as o_ln, sum(o_fln) as o_fln
              |from
              |(
              |    select  h.cAndSAndD, '3g' nettype, nvl(b.provcode, '0') provid, nvl(b.provname, '0') provname,
              |            nvl(b.citycode, '0') cityid, nvl(b.cityname, '0') cityname,
              |            nvl(h.enbid, '0') enbid, nvl(concat_ws('_', h.enbid, b.cityname), '0')  enbname,
-             |            h.ma_sn, h.ma_rn, h.a_sn, h.a_rn, h.f_d, h.f_u, (h.f_d + h.f_u) f_t
+             |            h.ma_sn, h.ma_rn, h.a_sn, h.a_rn, h.f_d, h.f_u, (h.f_d + h.f_u) f_t, h.o_ln, h.o_fln
              |    from    ${tmpCurHtable} h left join ${bs3gTable} b on(substr(h.enbid, 1, 4) = b.bsidpre)
              |    where   h.nettype='3g'
              |    union all
              |    select  h.cAndSAndD, '4g' nettype, nvl(b.provid, '0') provid, nvl(b.provname, '0') provname,
              |            nvl(b.cityid, '0') cityid, nvl(b.cityname, '0') cityname,
-             |            nvl(b.enbid, '0') enbid, nvl(b.zhlabel,'0') enbname,
-             |            h.ma_sn, h.ma_rn, h.a_sn, h.a_rn, h.f_d, h.f_u, (h.f_d + h.f_u) f_t
+             |            h.enbid, nvl(b.zhlabel,'0') enbname,
+             |            h.ma_sn, h.ma_rn, h.a_sn, h.a_rn, h.f_d, h.f_u, (h.f_d + h.f_u) f_t, h.o_ln, h.o_fln
              |    from    ${tmpCurHtable} h left join ${bs4gTable} b on(h.enbid = b.enbid)
              |    where  h.nettype='4g'
              |) t
@@ -134,48 +133,56 @@ object AreaRealTimeAnalysis extends Logging {
       // 由于3g和4g基站的编码不会重复， 所以可以采用3/4/t一块入hbase
       val bsNetStatSQL =
         s"""
-           |select cAndSAndD, enbid, enbname, nettype,
+           |select provname, cAndSAndD, enbid, enbname, nettype,
            |       ma_sn, ma_rn, if(ma_rn>'0',ma_sn/ma_rn, 0) ma_rat,
            |       a_sn, a_rn, if(a_rn>'0', a_sn/a_rn, 0) a_net_rat,
-           |       f_d, f_u, f_t,
+           |       f_d, f_u, f_t, o_ln, o_fln,
            |       row_number() over(partition by cAndSAndD, nettype order by ma_rn desc ) ma_net_rank,
            |       row_number() over(partition by cAndSAndD, nettype order by a_rn desc ) a_net_rank,
            |       row_number() over(partition by cAndSAndD, nettype order by f_t desc ) f_net_rank,
-           |       row_number() over(partition by cAndSAndD order by f_t desc ) f_total_rank
+           |       row_number() over(partition by cAndSAndD order by f_t desc ) f_total_rank,
+           |       row_number() over(partition by cAndSAndD, nettype order by o_fln desc ) o_net_rank
            |from ${bsTable} t
          """.stripMargin
       val bsNetResult = sqlContext.sql(bsNetStatSQL)
 
       val bsNetStatRDD = bsNetResult.coalesce(10).rdd.map(x => {
-        val maNetRank = if (null == x(13)) "0" else String.format("%3s", x(13).toString).replaceAll(" ", "0")
-        val aNetRank = if (null == x(14)) "0" else String.format("%3s", x(14).toString).replaceAll(" ", "0")
-        val fNetRank = if (null == x(15)) "0" else String.format("%3s", x(15).toString).replaceAll(" ", "0")
-        val fTotalRank = if (null == x(16)) "0" else String.format("%3s", x(16).toString).replaceAll(" ", "0")
+        val maNetRank = if (null == x(16)) "0" else String.format("%3s", x(16).toString).replaceAll(" ", "0")
+        val aNetRank = if (null == x(17)) "0" else String.format("%3s", x(17).toString).replaceAll(" ", "0")
+        val fNetRank = if (null == x(18)) "0" else String.format("%3s", x(18).toString).replaceAll(" ", "0")
+        val fTotalRank = if (null == x(19)) "0" else String.format("%3s", x(19).toString).replaceAll(" ", "0")
+        val oTotalRank = if (null == x(20)) "0" else String.format("%3s", x(20).toString).replaceAll(" ", "0")
 
-        val csd = if (null == x(0)) "0" else x(0).toString
-        val maRow = x(0).toString + "_" + maNetRank
-        val aRow = x(0).toString + "_" + aNetRank
-        val fRow = x(0).toString + "_" + fNetRank
-        val bid = if (null == x(1)) "0" else x(1).toString
-        val bname = if (null == x(2)) "0" else x(2).toString
-        val net = if (null == x(3)) "0" else x(3).toString
+        val proName = if (null == x(0)) "其他" else x(0).toString
+        val csd = if (null == x(1)) "0" else x(1).toString
+        val maRow = x(1).toString + "_" + maNetRank
+        val aRow = x(1).toString + "_" + aNetRank
+        val fRow = x(1).toString + "_" + fNetRank
+        val oRow = x(1).toString + "_" + oTotalRank
+
+        val bid = if (null == x(2)) "0" else x(2).toString
+        val bname = if (null == x(3)) "0" else x(3).toString
+        val net = if (null == x(4)) "0" else x(4).toString
         val netFlag = if ("3g" == net) "3" else if ("4g" == net) "4" else net
-        val marsn = if (null == x(4)) "0" else x(4).toString
-        val marn = if (null == x(5)) "0" else x(5).toString
-        val marat = if (null == x(6)) "0" else x(6).toString
+        val marsn = if (null == x(5)) "0" else x(5).toString
+        val marn = if (null == x(6)) "0" else x(6).toString
+        val marat = if (null == x(7)) "0" else x(7).toString
 
-        val arsn = if (null == x(7)) "0" else x(7).toString
-        val arn = if (null == x(8)) "0" else x(8).toString
-        val arat = if (null == x(9)) "0" else x(9).toString
+        val arsn = if (null == x(8)) "0" else x(8).toString
+        val arn = if (null == x(9)) "0" else x(9).toString
+        val arat = if (null == x(10)) "0" else x(10).toString
 
-        val fd = if (null == x(10)) "0" else x(10).toString
-        val fu = if (null == x(11)) "0" else x(11).toString
-        val ft = if (null == x(12)) "0" else x(12).toString
+        val fd = if (null == x(11)) "0" else x(11).toString
+        val fu = if (null == x(12)) "0" else x(12).toString
+        val ft = if (null == x(13)) "0" else x(13).toString
+
+        val ofln = if (null == x(14)) "0" else x(14).toString
 
         val maNetPut = if (maNetRank.toDouble < 1000) new Put(Bytes.toBytes(maRow)) else null
         val aNetPut = if (aNetRank.toDouble < 1000) new Put(Bytes.toBytes(aRow)) else null
         val fNetPut = if (fNetRank.toDouble < 1000) new Put(Bytes.toBytes(fRow)) else null
         val fTotalPut = if (fTotalRank.toDouble < 1000) new Put(Bytes.toBytes(fRow)) else null
+        val oTotalPut = if (oTotalRank.toDouble < 1000) new Put(Bytes.toBytes(oRow)) else null
 
         if (maNetPut != null) {
           maNetPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_t_rn_bd"), Bytes.toBytes(bid))
@@ -184,6 +191,8 @@ object AreaRealTimeAnalysis extends Logging {
           maNetPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_t_rat_bd"), Bytes.toBytes(bid))
           maNetPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_t_rat_bn"), Bytes.toBytes(bname))
           maNetPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_t_rat_bv"), Bytes.toBytes(marat))
+
+
         }
 
         if (aNetPut != null) {
@@ -207,7 +216,13 @@ object AreaRealTimeAnalysis extends Logging {
           fTotalPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_t_t_bv"), Bytes.toBytes(ft))
         }
 
-        ((new ImmutableBytesWritable, maNetPut), (new ImmutableBytesWritable, aNetPut), (new ImmutableBytesWritable, fNetPut), (new ImmutableBytesWritable, fTotalPut))
+        if (oTotalPut != null) {
+          oTotalPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_" + analyType + "_t_ablo_bd"), Bytes.toBytes(bid))
+          oTotalPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_" + analyType + "_t_ablo_bd"), Bytes.toBytes(bname))
+          oTotalPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_" + analyType + "_t_ablo_bv"), Bytes.toBytes(ofln))
+        }
+
+        ((new ImmutableBytesWritable, maNetPut), (new ImmutableBytesWritable, aNetPut), (new ImmutableBytesWritable, fNetPut), (new ImmutableBytesWritable, fTotalPut), (new ImmutableBytesWritable, oTotalPut))
 
       })
 
@@ -215,21 +230,23 @@ object AreaRealTimeAnalysis extends Logging {
       HbaseDataUtil.saveRddToHbase(areaRankHtable, bsNetStatRDD.map(_._2).filter(null != _._2))
       HbaseDataUtil.saveRddToHbase(areaRankHtable, bsNetStatRDD.map(_._3).filter(null != _._2))
       HbaseDataUtil.saveRddToHbase(areaRankHtable, bsNetStatRDD.map(_._4).filter(null != _._2))
+      HbaseDataUtil.saveRddToHbase(areaRankHtable, bsNetStatRDD.map(_._5).filter(null != _._2))
 
 
       val cityStatSQL =
         s"""select cAndSAndD, cityname, nettype,
            |       ma_sn, ma_rn, if(ma_rn>'0',ma_sn/ma_rn, 0) ma_rat,
            |       a_sn, a_rn, if(a_rn>'0',a_sn/a_rn, 0) a_rat,
-           |       f_d, f_u, f_t,
+           |       f_d, f_u, f_t, o_ln, o_fln,
            |       row_number() over(partition by cAndSAndD, nettype order by ma_rn desc) ma_rank,
            |       row_number() over(partition by cAndSAndD, nettype order by a_rn desc) a_rank,
-           |       row_number() over(partition by cAndSAndD, nettype order by f_t desc) f_rank
+           |       row_number() over(partition by cAndSAndD, nettype order by f_t desc) f_rank,
+           |       row_number() over(partition by cAndSAndD, nettype order by o_fln desc) o_rank
            |from
            |(
            |    select cAndSAndD, nvl(nettype, 't') nettype, cityname,
            |           sum(ma_sn) as ma_sn, sum(ma_rn) as ma_rn, sum(a_sn) as a_sn, sum(a_rn) as a_rn,
-           |           sum(f_d) as f_d, sum(f_u) as f_u, sum(f_t) as f_t
+           |           sum(f_d) as f_d, sum(f_u) as f_u, sum(f_t) as f_t, sum(o_ln) as o_ln, sum(o_fln) as o_fln
            |    from ${bsTable}
            |    group by cAndSAndD, nettype, cityname
            |    grouping sets((cAndSAndD, cityname), (cAndSAndD, nettype,  cityname))
@@ -238,14 +255,16 @@ object AreaRealTimeAnalysis extends Logging {
 
       val cityResultDF = sqlContext.sql(cityStatSQL)
       val cityStatRDD = cityResultDF.coalesce(10).rdd.map(x => {
-        val maRank = if (null == x(12)) "0" else String.format("%3s", x(12).toString).replaceAll(" ", "0")
-        val aRank = if (null == x(13)) "0" else String.format("%3s", x(13).toString).replaceAll(" ", "0")
-        val fRank = if (null == x(14)) "0" else String.format("%3s", x(14).toString).replaceAll(" ", "0")
+        val maRank = if (null == x(14)) "0" else String.format("%3s", x(14).toString).replaceAll(" ", "0")
+        val aRank = if (null == x(15)) "0" else String.format("%3s", x(15).toString).replaceAll(" ", "0")
+        val fRank = if (null == x(16)) "0" else String.format("%3s", x(16).toString).replaceAll(" ", "0")
+        val oRank = if (null == x(17)) "0" else String.format("%3s", x(17).toString).replaceAll(" ", "0")
 
         val csd = if (null == x(0)) "0" else x(0).toString
         val maRow = csd + "_" + maRank
         val aRow = csd + "_" + aRank
         val fRow = csd + "_" + fRank
+        val oRow = csd + "_" + oRank
 
         val cname = if (null == x(1)) "0" else x(1).toString
         val net = if (null == x(2)) "0" else x(2).toString
@@ -262,9 +281,12 @@ object AreaRealTimeAnalysis extends Logging {
         val fu = if (null == x(10)) "0" else x(10).toString
         val ft = if (null == x(11)) "0" else x(11).toString
 
+        val ofln = if (null == x(13)) "0" else x(13).toString
+
         val maPut = if (maRank.toDouble < 1000) new Put(Bytes.toBytes(maRow)) else null
         val aPut = if (aRank.toDouble < 1000) new Put(Bytes.toBytes(aRow)) else null
         val fPut = if (fRank.toDouble < 1000) new Put(Bytes.toBytes(fRow)) else null
+        val oPut = if (oRank.toDouble < 1000) new Put(Bytes.toBytes(oRow)) else null
 
         if (maPut != null) {
           maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rn_rd"), Bytes.toBytes(cname))
@@ -273,6 +295,8 @@ object AreaRealTimeAnalysis extends Logging {
           maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rat_rd"), Bytes.toBytes(cname))
           maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rat_rn"), Bytes.toBytes(cname))
           maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rat_rv"), Bytes.toBytes(marat))
+
+
         }
 
         if (aPut != null) {
@@ -285,18 +309,26 @@ object AreaRealTimeAnalysis extends Logging {
         }
 
         if (fPut != null) {
-          fPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_" + netFlag + "_t_bd"), Bytes.toBytes(cname))
-          fPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_" + netFlag + "_t_bn"), Bytes.toBytes(cname))
-          fPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_" + netFlag + "_t_bv"), Bytes.toBytes(ft))
+          fPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_" + netFlag + "_t_rd"), Bytes.toBytes(cname))
+          fPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_" + netFlag + "_t_rn"), Bytes.toBytes(cname))
+          fPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_" + netFlag + "_t_rv"), Bytes.toBytes(ft))
         }
 
-        ((new ImmutableBytesWritable, maPut), (new ImmutableBytesWritable, aPut), (new ImmutableBytesWritable, fPut))
+
+        if (oPut != null) {
+          oPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_" + analyType + "_" + netFlag + "_ablo_rd"), Bytes.toBytes(cname))
+          oPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_" + analyType + "_" + netFlag + "_ablo_rn"), Bytes.toBytes(cname))
+          oPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_" + analyType + "_" + netFlag + "_ablo_rv"), Bytes.toBytes(ofln))
+        }
+
+        ((new ImmutableBytesWritable, maPut), (new ImmutableBytesWritable, aPut), (new ImmutableBytesWritable, fPut), (new ImmutableBytesWritable, fPut), (new ImmutableBytesWritable, oPut))
 
       })
 
       HbaseDataUtil.saveRddToHbase(areaRankHtable, cityStatRDD.map(_._1).filter(null != _._2))
       HbaseDataUtil.saveRddToHbase(areaRankHtable, cityStatRDD.map(_._2).filter(null != _._2))
       HbaseDataUtil.saveRddToHbase(areaRankHtable, cityStatRDD.map(_._3).filter(null != _._2))
+      HbaseDataUtil.saveRddToHbase(areaRankHtable, cityStatRDD.map(_._4).filter(null != _._2))
 
 
       val proStatSQL =
@@ -304,15 +336,16 @@ object AreaRealTimeAnalysis extends Logging {
            |select cAndSAndD, provname, nettype,
            |       ma_sn, ma_rn,  if(ma_rn>'0',ma_sn/ma_rn, 0) ma_rat,
            |       a_sn, a_rn, if(a_rn>'0',a_sn/a_rn, 0) a_rat,
-           |       f_d, f_u, f_t,
+           |       f_d, f_u, f_t, o_ln, o_fln,
            |       row_number() over(partition by cAndSAndD, nettype order by ma_rn desc) ma_rank,
            |       row_number() over(partition by cAndSAndD, nettype order by a_rn desc) a_rank,
-           |       row_number() over(partition by cAndSAndD, nettype order by f_t desc) f_rank
+           |       row_number() over(partition by cAndSAndD, nettype order by f_t desc) f_rank,
+           |       row_number() over(partition by cAndSAndD, nettype order by o_fln desc) f_rank
            |from
            |(
            |    select cAndSAndD, nvl(nettype, 't') nettype, provname,
            |           sum(ma_sn) as ma_sn, sum(ma_rn) as ma_rn, sum(a_sn) as a_sn, sum(a_rn) as a_rn,
-           |           sum(f_d) as f_d, sum(f_u) as f_u, sum(f_t) as f_t
+           |           sum(f_d) as f_d, sum(f_u) as f_u, sum(f_t) as f_t, sum(o_ln) as o_ln, sum(o_fln) as o_fln
            |    from ${bsTable}
            |    group by cAndSAndD, nettype, provname
            |    grouping sets((cAndSAndD, provname), (cAndSAndD, nettype,  provname))
@@ -321,14 +354,16 @@ object AreaRealTimeAnalysis extends Logging {
 
       val proResultDF = sqlContext.sql(proStatSQL)
       val proStatRDD = proResultDF.coalesce(10).rdd.map(x => {
-        val maRank = if (null == x(12)) "0" else String.format("%3s", x(12).toString).replaceAll(" ", "0")
-        val aRank = if (null == x(13)) "0" else String.format("%3s", x(13).toString).replaceAll(" ", "0")
-        val fRank = if (null == x(14)) "0" else String.format("%3s", x(14).toString).replaceAll(" ", "0")
+        val maRank = if (null == x(14)) "0" else String.format("%3s", x(14).toString).replaceAll(" ", "0")
+        val aRank = if (null == x(15)) "0" else String.format("%3s", x(15).toString).replaceAll(" ", "0")
+        val fRank = if (null == x(16)) "0" else String.format("%3s", x(16).toString).replaceAll(" ", "0")
+        val oRank = if (null == x(17)) "0" else String.format("%3s", x(17).toString).replaceAll(" ", "0")
 
         val csd = if (null == x(0)) "0" else x(0).toString
         val maRow = csd + "_" + maRank
         val aRow = csd + "_" + aRank
         val fRow = csd + "_" + fRank
+        val oRow = csd + "_" + oRank
 
         val pname = if (null == x(1)) "0" else x(1).toString
         val net = if (null == x(2)) "0" else x(2).toString
@@ -345,41 +380,51 @@ object AreaRealTimeAnalysis extends Logging {
         val fu = if (null == x(10)) "0" else x(10).toString
         val ft = if (null == x(11)) "0" else x(11).toString
 
+        val ofln = if (null == x(13)) "0" else x(13).toString
+
         val maPut = if (maRank.toDouble < 1000) new Put(Bytes.toBytes(maRow)) else null
         val aPut = if (aRank.toDouble < 1000) new Put(Bytes.toBytes(aRow)) else null
         val fPut = if (fRank.toDouble < 1000) new Put(Bytes.toBytes(fRow)) else null
+        val oPut = if (oRank.toDouble < 1000) new Put(Bytes.toBytes(oRow)) else null
 
         if (maPut != null) {
-          maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rn_rd"), Bytes.toBytes(pname))
-          maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rn_rn"), Bytes.toBytes(pname))
-          maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rn_rv"), Bytes.toBytes(marn))
+          maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rn_pd"), Bytes.toBytes(pname))
+          maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rn_pn"), Bytes.toBytes(pname))
+          maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rn_pv"), Bytes.toBytes(marn))
           maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rat_rd"), Bytes.toBytes(pname))
           maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rat_rn"), Bytes.toBytes(pname))
           maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rat_rv"), Bytes.toBytes(marat))
         }
 
         if (aPut != null) {
-          aPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_" + netFlag + "_rn_rd"), Bytes.toBytes(pname))
-          aPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_" + netFlag + "_rn_rn"), Bytes.toBytes(pname))
-          aPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_" + netFlag + "_rn_rv"), Bytes.toBytes(arn))
-          aPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_" + netFlag + "_rat_rd"), Bytes.toBytes(pname))
-          aPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_" + netFlag + "_rat_rn"), Bytes.toBytes(pname))
-          aPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_" + netFlag + "_rat_rv"), Bytes.toBytes(arat))
+          aPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_" + netFlag + "_rn_pd"), Bytes.toBytes(pname))
+          aPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_" + netFlag + "_rn_pn"), Bytes.toBytes(pname))
+          aPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_" + netFlag + "_rn_pv"), Bytes.toBytes(arn))
+          aPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_" + netFlag + "_rat_pd"), Bytes.toBytes(pname))
+          aPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_" + netFlag + "_rat_pn"), Bytes.toBytes(pname))
+          aPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("a_" + analyType + "_" + netFlag + "_rat_pv"), Bytes.toBytes(arat))
         }
 
         if (fPut != null) {
-          fPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_" + netFlag + "_t_bd"), Bytes.toBytes(pname))
-          fPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_" + netFlag + "_t_bn"), Bytes.toBytes(pname))
-          fPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_" + netFlag + "_t_bv"), Bytes.toBytes(ft))
+          fPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_" + netFlag + "_t_pd"), Bytes.toBytes(pname))
+          fPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_" + netFlag + "_t_pn"), Bytes.toBytes(pname))
+          fPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_" + netFlag + "_t_pv"), Bytes.toBytes(ft))
         }
 
-        ((new ImmutableBytesWritable, maPut), (new ImmutableBytesWritable, aPut), (new ImmutableBytesWritable, fPut))
+        if (oPut != null) {
+          oPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_" + analyType + "_" + netFlag + "_ablo_rd"), Bytes.toBytes(pname))
+          oPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_" + analyType + "_" + netFlag + "_ablo_rn"), Bytes.toBytes(pname))
+          oPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_" + analyType + "_" + netFlag + "_ablo_rv"), Bytes.toBytes(ofln))
+        }
+
+        ((new ImmutableBytesWritable, maPut), (new ImmutableBytesWritable, aPut), (new ImmutableBytesWritable, fPut), (new ImmutableBytesWritable, oPut))
 
       })
 
       HbaseDataUtil.saveRddToHbase(areaRankHtable, proStatRDD.map(_._1).filter(null != _._2))
       HbaseDataUtil.saveRddToHbase(areaRankHtable, proStatRDD.map(_._2).filter(null != _._2))
       HbaseDataUtil.saveRddToHbase(areaRankHtable, proStatRDD.map(_._3).filter(null != _._2))
+      HbaseDataUtil.saveRddToHbase(areaRankHtable, proStatRDD.map(_._4).filter(null != _._2))
 
 
       // 汇总
@@ -388,7 +433,7 @@ object AreaRealTimeAnalysis extends Logging {
            |select cAndSAndD, nettype,
            |       ma_sn, ma_rn,  if(ma_rn>'0',ma_sn/ma_rn, 0) ma_rat,
            |       a_sn, a_rn, if(a_rn>'0',a_sn/a_rn, 0) a_rat,
-           |       f_d, f_u, f_t,
+           |       f_d, f_u, f_t, o_ln, o_fln,
            |       row_number() over(partition by cAndSAndD, nettype order by ma_rn desc) ma_rank,
            |       row_number() over(partition by cAndSAndD, nettype order by a_rn desc) a_rank,
            |       row_number() over(partition by cAndSAndD, nettype order by f_t desc) f_rank
@@ -396,7 +441,7 @@ object AreaRealTimeAnalysis extends Logging {
            |(
            |    select cAndSAndD, nvl(nettype, 't') nettype,
            |           sum(ma_sn) as ma_sn, sum(ma_rn) as ma_rn, sum(a_sn) as a_sn, sum(a_rn) as a_rn,
-           |           sum(f_d) as f_d, sum(f_u) as f_u, sum(f_t) as f_t
+           |           sum(f_d) as f_d, sum(f_u) as f_u, sum(f_t) as f_t, sum(o_ln) as o_ln, sum(o_fln) as o_fln
            |    from ${bsTable}
            |    group by cAndSAndD, nettype
            |    grouping sets(cAndSAndD, (cAndSAndD, nettype))
@@ -405,14 +450,16 @@ object AreaRealTimeAnalysis extends Logging {
 
       val sumResultDF = sqlContext.sql(sumStatSQL)
       val sumStatRDD = sumResultDF.coalesce(10).rdd.map(x => {
-        val maRank = if (null == x(11)) "0" else String.format("%3s", x(11).toString).replaceAll(" ", "0")
-        val aRank = if (null == x(12)) "0" else String.format("%3s", x(12).toString).replaceAll(" ", "0")
-        val fRank = if (null == x(13)) "0" else String.format("%3s", x(13).toString).replaceAll(" ", "0")
+        val maRank = if (null == x(13)) "0" else String.format("%3s", x(13).toString).replaceAll(" ", "0")
+        val aRank = if (null == x(14)) "0" else String.format("%3s", x(14).toString).replaceAll(" ", "0")
+        val fRank = if (null == x(15)) "0" else String.format("%3s", x(15).toString).replaceAll(" ", "0")
+        val oRank = if (null == x(16)) "0" else String.format("%3s", x(16).toString).replaceAll(" ", "0")
 
         val csd = if (null == x(0)) "0" else x(0).toString
         val maRow = csd + "_000"
         val aRow = csd + "_000"
         val fRow = csd + "_000"
+        val oRow = csd + "_000"
 
         val net = if (null == x(1)) "0" else x(1).toString
         val netFlag = if ("3g" == net) "3" else if ("4g" == net) "4" else net
@@ -428,9 +475,12 @@ object AreaRealTimeAnalysis extends Logging {
         val fu = if (null == x(9)) "0" else x(9).toString
         val ft = if (null == x(10)) "0" else x(10).toString
 
+        val ofln = if (null == x(12)) "0" else x(12).toString
+
         val maPut = if (maRank.toDouble < 1000) new Put(Bytes.toBytes(maRow)) else null
         val aPut = if (aRank.toDouble < 1000) new Put(Bytes.toBytes(aRow)) else null
         val fPut = if (fRank.toDouble < 1000) new Put(Bytes.toBytes(fRow)) else null
+        val oPut = if (oRank.toDouble < 1000) new Put(Bytes.toBytes(oRow)) else null
 
         if (maPut != null) {
           maPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("ma_" + analyType + "_" + netFlag + "_rn_sv"), Bytes.toBytes(marn))
@@ -446,13 +496,19 @@ object AreaRealTimeAnalysis extends Logging {
           fPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("f_" + analyType + "_" + netFlag + "_t_sv"), Bytes.toBytes(ft))
         }
 
-        ((new ImmutableBytesWritable, maPut), (new ImmutableBytesWritable, aPut), (new ImmutableBytesWritable, fPut))
+
+        if (oPut != null) {
+          oPut.addColumn(Bytes.toBytes("r"), Bytes.toBytes("o_" + analyType + "_" + netFlag + "_ablo_sv"), Bytes.toBytes(ofln))
+        }
+
+        ((new ImmutableBytesWritable, maPut), (new ImmutableBytesWritable, aPut), (new ImmutableBytesWritable, fPut), (new ImmutableBytesWritable, oPut))
 
       })
 
       HbaseDataUtil.saveRddToHbase(areaRankHtable, proStatRDD.map(_._1).filter(null != _._2))
       HbaseDataUtil.saveRddToHbase(areaRankHtable, proStatRDD.map(_._2).filter(null != _._2))
       HbaseDataUtil.saveRddToHbase(areaRankHtable, proStatRDD.map(_._3).filter(null != _._2))
+      HbaseDataUtil.saveRddToHbase(areaRankHtable, proStatRDD.map(_._4).filter(null != _._2))
 
 
 

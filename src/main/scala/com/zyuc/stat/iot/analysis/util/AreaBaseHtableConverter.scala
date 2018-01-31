@@ -38,7 +38,9 @@ object AreaBaseHtableConverter extends Logging {
     StructField("a_rn", StringType),
 
     StructField("f_d", StringType),
-    StructField("f_u", StringType)
+    StructField("f_u", StringType),
+    StructField("o_ln", StringType),
+    StructField("o_fln", StringType)
   ))
 
   /**
@@ -69,6 +71,8 @@ object AreaBaseHtableConverter extends Logging {
       val a_rn = Bytes.toString(row._2.getValue(Bytes.toBytes("r"), Bytes.toBytes("a_rn")))
       val f_u = Bytes.toString(row._2.getValue(Bytes.toBytes("r"), Bytes.toBytes("f_u")))
       val f_d = Bytes.toString(row._2.getValue(Bytes.toBytes("r"), Bytes.toBytes("f_d")))
+      val o_ln = Bytes.toString(row._2.getValue(Bytes.toBytes("r"), Bytes.toBytes("o_ln")))
+      val o_fln = Bytes.toString(row._2.getValue(Bytes.toBytes("r"), Bytes.toBytes("o_fln")))
 
 /*      var ma_rat_tmp = if(null == ma_rn || "0" == ma_rn) 0.000 else (ma_sn.toDouble/ma_rn.toDouble)
       val ma_rat = f"$ma_rat_tmp%1.4f"
@@ -96,7 +100,9 @@ object AreaBaseHtableConverter extends Logging {
 
         if(null==a_rn) "0" else a_rn,
         if(null==f_u) "0" else f_u,
-        if(null==f_d) "0" else f_d
+        if(null==f_d) "0" else f_d,
+        if(null==o_ln) "0" else o_ln,
+        if(null==o_fln) "0" else o_fln
       )
 
     }catch {

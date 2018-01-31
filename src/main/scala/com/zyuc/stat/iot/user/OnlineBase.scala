@@ -305,7 +305,7 @@ object OnlineBase extends Logging{
 
     ///////////////////////////////////////////////////////////////////////////////////////
     //   根据业务统计在线用户数
-    //
+    // create 'iot_dynamic_data','onlinebase','basic'
     ///////////////////////////////////////////////////////////////////////////////////////
 
     // vpdn汇总/vpdn按照域名汇总
@@ -349,7 +349,6 @@ object OnlineBase extends Logging{
          |group by companycode, vpdndomain, type
          |GROUPING SETS((companycode, vpdndomain), (companycode, vpdndomain, type))
        """.stripMargin
-
 
     // 普通企业/定向
     val haccgAndPgwMDN =

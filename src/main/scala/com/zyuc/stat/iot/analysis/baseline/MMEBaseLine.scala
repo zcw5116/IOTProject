@@ -66,7 +66,7 @@ object MMEBaseLine {
         println("2")
         hbaseDF = hbaseDF.unionAll(MMEHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + modeName + "_" + dayid).filter(s"time>='${dayM5Time}'"))
       }
-      else if(i>1){
+      else if(i>0){
         hbaseDF = hbaseDF.unionAll(MMEHtableConverter.convertToDF(sc, sqlContext, resultHtablePre + modeName + "_" + dayid))
       }
     }
@@ -91,12 +91,12 @@ object MMEBaseLine {
          |select compnyAndSerAndDomain, time,
          |ma_c_4_rn, ma_c_4_sn, ma_c_4_rcn,
          |ma_c_4_scn, ma_c_4_fcn, ma_c_4_rat,
-         |row_number() over(partition by compnyAndSerAndDomain, time order by ma_c_4_rn) ma_c_4_rn_rn,
-         |row_number() over(partition by compnyAndSerAndDomain, time order by ma_c_4_sn) ma_c_4_sn_rn,
-         |row_number() over(partition by compnyAndSerAndDomain, time order by ma_c_4_rcn) ma_c_4_rcn_rn,
-         |row_number() over(partition by compnyAndSerAndDomain, time order by ma_c_4_scn) ma_c_4_scn_rn,
-         |row_number() over(partition by compnyAndSerAndDomain, time order by ma_c_4_fcn) ma_c_4_fcn_rn,
-         |row_number() over(partition by compnyAndSerAndDomain, time order by ma_c_4_rat) ma_c_4_rat_rn
+         |row_number() over(partition by compnyAndSerAndDomain, time order by cast(ma_c_4_rn as double)) ma_c_4_rn_rn,
+         |row_number() over(partition by compnyAndSerAndDomain, time order by cast(ma_c_4_sn as double)) ma_c_4_sn_rn,
+         |row_number() over(partition by compnyAndSerAndDomain, time order by cast(ma_c_4_rcn as double)) ma_c_4_rcn_rn,
+         |row_number() over(partition by compnyAndSerAndDomain, time order by cast(ma_c_4_scn as double)) ma_c_4_scn_rn,
+         |row_number() over(partition by compnyAndSerAndDomain, time order by cast(ma_c_4_fcn as double)) ma_c_4_fcn_rn,
+         |row_number() over(partition by compnyAndSerAndDomain, time order by cast(ma_c_4_rat as double)) ma_c_4_rat_rn
          |from ${tmpTable}
        """.stripMargin
 
