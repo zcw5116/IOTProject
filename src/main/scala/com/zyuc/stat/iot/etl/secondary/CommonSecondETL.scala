@@ -27,7 +27,7 @@ object CommonSecondETL extends Logging{
     val appName = sc.getConf.get("spark.app.name") // name_{}_2017073111
     val inputPath = sc.getConf.get("spark.app.inputPath") // "hdfs://EPC-LOG-NM-15:8020/hadoop/IOT/data/cdr/output/pdsn/data/"
     val outputPath = sc.getConf.get("spark.app.outputPath") //"hdfs://EPC-LOG-NM-15:8020/hadoop/IOT/data/cdr/secondaryoutput/pdsn/"
-    val itemType = sc.getConf.get("spark.app.item.type") // pdsn,pgw,haccg   iot_cdr_data_haccg
+    val itemType = sc.getConf.get("spark.app.item.type") // pdsn,pgw,haccg   iot_cdr_data_haccg iot_mme_data_nb
     val FirstETLTable = sc.getConf.get("spark.app.table.source") // "iot_cdr_data_pdsn"
     val SecondaryETLTable = sc.getConf.get("spark.app.table.stored") // "iot_cdr_data_pdsn_h"
     val timeid = sc.getConf.get("spark.app.timeid")//yyyymmddhhmiss
@@ -293,6 +293,45 @@ object CommonSecondETL extends Logging{
       }
 
     }
+    if(itemType=="nbmme"){
+      //terminaltable = "iot_dim_terminal"
+
+
+
+      if(cyctype =="h") {
+
+        resultDF = sqlContext.sql(
+          s""" select m.procedureid,m.acctype,m.imsi,
+             |       m.msisdn,m.sergw,m.pcause,m.imei,m.ci,m.enbid,m.uemme,m.newgrpid,
+             |       m.newmmecode,m.newmtmsi,m.oldmcc,m.oldgrpid,m.oldmmecode,
+             |       m.oldmtmsi,m.province,m.mmetype,m.result,m.isattach,
+             |       t.tac,t.modelname,t.devicetype,
+             |       substr(regexp_replace(starttime,"[: -]", ""),1,14) as starttime,
+             |       RegProSign,RegProRst,delay,
+             |       '${partitionD}' as d,'${partitionH}' as h
+             |from   ${tmptable} m
+             |left join ${terminaltable} t
+             |on   substr(m.imei,1,8) = t.tac
+           """.stripMargin
+        )
+
+      }
+      //if(cyctype =="d"){
+      //  resultDF = sqlContext.sql(
+      //    s""" select m.procedureid,m.starttime,m.acctype,m.imsi,
+      //       |       m.msisdn,m.sergw,m.pcause,m.imei,m.ci,m.enbid,m.uemme,m.newgrpid,
+      //       |       m.newmmecode,m.newmtmsi,m.oldmcc,m.oldgrpid,m.oldmmecode,
+      //       |       m.oldmtmsi,m.province,m.mmetype,m.result,m.isattach,
+      //       |       m.tac,m.modelname,m.devicetype,
+      //       |       '${partitionD}' as d
+      //       |from   ${tmptable} m
+      //     """.stripMargin
+      //  )
+//
+      //}
+
+    }
+
 
     // cdr_pgw
     if(itemType=="cdr_pgw"){
