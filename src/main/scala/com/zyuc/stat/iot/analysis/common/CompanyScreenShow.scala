@@ -49,6 +49,7 @@ object CompanyScreenShow extends Logging {
     val resultDF = sqlContext.sql(statSQL)
     val companyServSet = new scala.collection.mutable.HashSet[Tuple3[String, String, Long]]
     val result = resultDF.map(x => (x.getString(0), x.getLong(1), x.getLong(2), x.getLong(3))).collect()
+
     result.foreach(x => {
       // cset+=((x._1, "tnum", x._2))
       companyServSet += ((x._1, "定向企业数", x._3))

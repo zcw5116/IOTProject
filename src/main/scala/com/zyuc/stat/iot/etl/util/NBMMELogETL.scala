@@ -16,6 +16,7 @@ import scala.collection.mutable
   * Created by dell on 2018/1/26.
   */
 object NBMMELogETL extends Logging{
+
   def doJob(parentContext: SQLContext, fileSystem:FileSystem, appName:String, loadTime:String, inputPath:String, outputPath:String, hwmmWildcard:String, hwsmWildcard:String, ztmmWildcard:String, ztsmWildcard:String,ermmWildcard:String,ersmWildcard:String): String ={
     var sqlContext = parentContext.newSession()
 

@@ -9,6 +9,8 @@ import java.util.concurrent.Executors
 
 import com.alibaba.fastjson.JSON
 import com.sun.net.httpserver.{Headers, HttpExchange, HttpHandler, HttpServer}
+import com.zyuc.stat.app.FileManage
+import com.zyuc.stat.epc.etl.{EpcGwEtl, EpcMmeEtl}
 import com.zyuc.stat.iot.etl.CDRETL.doJob
 import com.zyuc.stat.iot.etl.{CDRETL, MMELogETL, SMSCETL}
 import com.zyuc.stat.iot.smsc.SMSCAnalysis
@@ -92,7 +94,39 @@ object ConvertServer {
             val logTableName = Params.getString("logTableName")
             serverInfo = "未知异常"
             serverInfo = SMSCETL.doJob(sqlContext, fileSystem, appName, loadTime, inputPath, outputPath, fileWildcard, coalesceSize.toInt, logType, logTableName)
-          } else {
+          }else if(serverLine == "epcGwETL"){
+            val appName = Params.getString("appName")
+            val loadTime = Params.getString("loadTime")
+            val inputPath = Params.getString("inputPath")
+            val mdnSectionPath = Params.getString("mdnSectionPath")
+            val gwTableName = Params.getString("gwTableName")
+            val outputPath = Params.getString("outputPath")
+            val gwType = Params.getString("gwType")
+            serverInfo = "未知异常"
+            serverInfo = EpcGwEtl.doEpcGwEtl(sqlContext, loadTime, inputPath, outputPath, mdnSectionPath, gwTableName, gwType )
+          } else if(serverLine == "epcMmeETL"){
+            val appName = Params.getString("appName")
+            val loadTime = Params.getString("loadTime")
+            val inputPath = Params.getString("inputPath")
+            val mdnSectionPath = Params.getString("mdnSectionPath")
+            val mmeTableName = Params.getString("mmeTableName")
+            val outputPath = Params.getString("outputPath")
+            val ztMMWildcard = Params.getString("ztMMWildcard")
+            val ztSMWildcard = Params.getString("ztSMWildcard")
+            val ztPagingWildcard = Params.getString("ztPagingWildcard")
+            serverInfo = "未知异常"
+            serverInfo = EpcMmeEtl.doEpcMmeEtl(sqlContext, loadTime, inputPath, outputPath, mdnSectionPath, mmeTableName, ztMMWildcard, ztSMWildcard, ztPagingWildcard)
+          }
+          else if(serverLine == "mergeFiles"){
+            val appName = Params.getString("appName")
+            val batchTime = Params.getString("batchTime")
+            val inputPath = Params.getString("inputPath")
+            val childPath = Params.getString("childPath")
+            val mergePath = Params.getString("mergePath")
+            serverInfo = "未知异常"
+            serverInfo = appName + "|" +FileManage.mergeFiles(sqlContext, fileSystem, batchTime, inputPath, childPath, mergePath)
+          }
+          else {
             System.out.println("go")
           }
         }catch {

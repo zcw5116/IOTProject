@@ -5,10 +5,12 @@ package com.zyuc.stat.utils
   */
 
 import java.io.{File, FileOutputStream, IOException}
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.io.IOUtils
 import org.apache.spark.Logging
+
 import scala.collection.mutable
 
 
@@ -37,6 +39,90 @@ object FileUtils extends Logging {
     }
 
   }
+
+  /**
+    * 根据目录下文件的大小计算partition数
+    *
+    * @param fileSystem
+    * @param filePath
+    * @param partitionSize
+    * @return
+    */
+  def computePartitionNum(fileSystem: FileSystem, filePath: String, partitionSize: Int): Int = {
+    val path = new Path(filePath)
+    try {
+      val filesize = fileSystem.getContentSummary(path).getLength
+      val msize = filesize.asInstanceOf[Double] / 1024 / 1024 / partitionSize
+      Math.ceil(msize).toInt
+    } catch {
+      case e: IOException => e.printStackTrace()
+        1
+    }
+  }
+
+  /**
+    *
+    * 将源目录中的文件移动到目标目录中
+    *
+    * @param fileSystem
+    * @param loadTime
+    * @param fromDir
+    * @param destDir
+    * @param ifTruncDestDir
+    */
+  def moveFiles(fileSystem: FileSystem, loadTime: String, fromDir: String, destDir: String, ifTruncDestDir: Boolean): Unit = {
+
+    val fromDirPath = new Path(fromDir)
+    val destDirPath = new Path(destDir)
+
+    if (!fileSystem.exists(new Path(destDir))) {
+      fileSystem.mkdirs(destDirPath.getParent)
+    }
+
+    // 是否清空目标目录下面的所有文件
+    if (ifTruncDestDir) {
+      fileSystem.globStatus(new Path(destDir + "/*") ).foreach(x => fileSystem.delete(x.getPath(), true))
+    }
+
+    var num = 0
+    fileSystem.globStatus(new Path(fromDir + "/*")).foreach(x => {
+
+      val fromLocation = x.getPath().toString
+      val fileName = fromLocation.substring(fromLocation.lastIndexOf("/") + 1)
+      val fromPath = new Path(fromLocation)
+
+      if (fileName != "_SUCCESS") {
+        var destLocation = fromLocation.replace(fromDir, destDir)
+        val fileSuffix = if (fileName.contains(".")) fileName.substring(fileName.lastIndexOf(".")) else ""
+        val newFileName = loadTime + "_" + num + fileSuffix
+
+        destLocation = destLocation.substring(0, destLocation.lastIndexOf("/") + 1) + newFileName
+        num = num + 1
+        val destPath = new Path(destLocation)
+
+        if (!fileSystem.exists(destPath.getParent)) {
+          fileSystem.mkdirs(destPath.getParent)
+        }
+        fileSystem.rename(fromPath, destPath)
+      }
+
+    })
+    logInfo("move files ")
+  }
+
+/*
+  def computeCoalesceSize(fileSystem: FileSystem, filePath: String, coalesceSize: Int) : Int = {
+    val path = new Path(filePath)
+    try {
+      val filesize = fileSystem.getContentSummary(path).getLength
+      val msize = filesize.asInstanceOf[Double] / 1024 / 1024 / coalesceSize
+      Math.ceil(msize).toInt
+    } catch {
+      case e: IOException => e.printStackTrace()
+        1
+    }
+  }
+*/
 
 
   /**
@@ -74,6 +160,8 @@ object FileUtils extends Logging {
 
     // 删除数据目录到文件
     partitions.foreach(partition => {
+      println("outputPath:" + outputPath)
+      println("partition:" + partition)
       val dataPath = new Path(outputPath + "data/" + partition + "/" + loadTime + "-" + "*.orc")
       fileSystem.globStatus(dataPath).foreach(x => fileSystem.delete(x.getPath(), false)
       )
@@ -109,10 +197,11 @@ object FileUtils extends Logging {
     * 临时目录： ${outputPath}/temp/
     * 正式目录： ${outputPath}/data/
     * 移动数据到data目录前， 先删除data目录下的所有见
+    *
     * @author zhoucw
-    * @param fileSystem   hdfs文件系统
-    * @param outputPath   输出目录
-    * @param loadTime     时间
+    * @param fileSystem hdfs文件系统
+    * @param outputPath 输出目录
+    * @param loadTime   时间
     */
   def moveTempFilesToData(fileSystem: FileSystem, outputPath: String, loadTime: String): Unit = {
 

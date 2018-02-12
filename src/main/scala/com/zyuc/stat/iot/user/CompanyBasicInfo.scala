@@ -25,7 +25,7 @@ object CompanyBasicInfo {
     val userAndDomainTable = sc.getConf.get("spark.app.table.userAndDomain", "iot_basic_user_and_domain") //"iot_basic_user_and_domain"
     val companyAndDomain = sc.getConf.get("spark.app.table.companyAndDomain", "iot_basic_company_and_domain") //"iot_basic_company_and_domain"
     val companyNameFile = sc.getConf.get("spark.app.companyNameFile", "/hadoop/IOT/ANALY_PLATFORM/BasicData/BaseInfo/map_iot_company.yml")//
-    val companyHtable = sc.getConf.get("spark.app.htable.companyHtable", "iot_company_basic")
+    val companyHtable = sc.getConf.get("spark.app.htable.companyHtable", "iot_company_basics")
     val companyVpdnHtable = sc.getConf.get("spark.app.htable.companyVpdnHtable", "iot_company_split")
     // val ifUpdateLatestInfo = sc.getConf.get("spark.app.ifUpdateLatestInfo","1") //  是否更新iot_basic_companyinfo的latestdate和cnt_latest, 0-不更新， 1-更新
     val appName = sc.getConf.get("spark.app.name")
